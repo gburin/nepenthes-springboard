@@ -1,0 +1,149 @@
+#NEXUS
+begin taxa;
+	dimensions ntax=55;
+	taxlabels
+	N_adrianii
+	N_alata
+	N_albomarginata
+	N_ampularia
+	N_biak
+	N_bokoriensis
+	N_boschiana
+	N_burbidgeae
+	N_burkii
+	N_clipeata
+	N_copelandii
+	N_cornuta
+	N_dactylifera
+	N_eymae
+	N_flava
+	N_glabrata
+	N_glandulifera
+	N_gracilis
+	N_gymnamphora
+	N_hemsleyana
+	N_hirsuta
+	N_hispida
+	N_inermis
+	N_kampotiana
+	N_khasiana
+	N_lavicola
+	N_maxima
+	N_mikeii
+	N_minima
+	N_mira
+	N_mirabilis
+	N_naga
+	N_ovata
+	N_pervillei
+	N_phillippinensis
+	N_pitopangi
+	N_platychylla
+	N_pulchra
+	N_rafflesiana
+	N_ramispina
+	N_reinwardtiana
+	N_rhombicaulis
+	N_sanguinea
+	N_spathulata
+	N_spectabilis
+	N_stenophylla
+	N_sumagaya
+	N_talangensis
+	N_tentaculata
+	N_thai
+	N_tobaica
+	N_treubiana
+	N_truncata
+	N_veitchii
+	N_ventricosa
+;
+end;
+
+begin trees;
+	tree tree_1 = [&R] (N_pervillei:0.05,(N_khasiana:0.194237,(((N_tentaculata:0.05,(N_glabrata:0.05,N_pitopangi:0.05)[&label=1]:0.990923)[&label=0.82]:1.078771,((N_biak:0.901853,(N_ventricosa:0.05,N_burkii:0.352701)[&label=1]:0.231587)[&label=1]:1.581908,((N_hispida:0.05,N_hirsuta:0.05)[&label=1]:0.555614,((N_albomarginata:1.273233,(N_reinwardtiana:0.162785,((N_boschiana:0.05,(N_burbidgeae:0.05,((N_clipeata:0.05,N_veitchii:0.05)[&label=0.42]:0.014984,(N_dactylifera:0.129495,(N_platychylla:0.05,((N_stenophylla:0.05,N_glandulifera:0.158126)[&label=0.99]:0.094408,(N_maxima:0.05,(N_eymae:0.05,N_minima:0.196781)[&label=0.88]:0.164403)[&label=1]:0.589429)[&label=0.4]:0.006972)[&label=0.64]:0.046673)[&label=0.49]:0.016021)[&label=0.94]:0.106491)[&label=0.76]:0.05607)[&label=1]:0.486017,((N_alata:0.458839,(N_phillippinensis:0.05,N_mira:0.395301)[&label=0.97]:0.083931)[&label=1]:0.393993,(N_truncata:0.335637,((N_cornuta:0.196508,(N_sumagaya:0.05,N_pulchra:0.05)[&label=1]:0.175407)[&label=0.79]:0.230947,N_copelandii:0.25125)[&label=0.55]:0.049791)[&label=1]:0.918698)[&label=0.38]:0.004402)[&label=0.95]:0.118441)[&label=0.78]:0.054516)[&label=0.77]:0.145217,(((N_sanguinea:0.05,N_ramispina:0.05)[&label=0.36]:0.484692,(N_thai:0.350651,(N_kampotiana:0.05,N_bokoriensis:0.164443)[&label=0.55]:0.157829)[&label=1]:0.510383)[&label=0.85]:0.056338,((N_mikeii:0.05,(N_rhombicaulis:0.05,(N_lavicola:0.05,N_spectabilis:0.130368)[&label=0.92]:0.295864)[&label=0.82]:0.057901)[&label=1]:0.152709,(N_tobaica:0.654237,((((N_spathulata:0.05,N_adrianii:0.05)[&label=1]:0.198506,N_talangensis:0.287613)[&label=1]:0.220905,((N_inermis:0.05,N_naga:0.081281)[&label=0.79]:0.047425,(N_flava:0.05,N_ovata:0.05)[&label=1]:0.480633)[&label=0.3]:0.232921)[&label=0.56]:0.033697,N_gymnamphora:0.574664)[&label=0.86]:0.057067)[&label=1]:0.282958)[&label=0.7]:0.294125)[&label=1]:0.506971)[&label=0.56]:0.022475)[&label=0.54]:0.041067)[&label=0.99]:0.094592)[&label=1]:0.419368,((N_treubiana:1.734005,(N_ampularia:1.062046,((N_hemsleyana:0.05,N_rafflesiana:0.05)[&label=1]:0.673145,N_mirabilis:0.648795)[&label=1]:0.201137)[&label=1]:0.158999)[&label=0.98]:0.098955,N_gracilis:0.518303)[&label=1]:0.321383)[&label=0.8]:1.331684)[&label=1]:0.635933);
+end;
+
+begin figtree;
+	set appearance.backgroundColorAttribute="Default";
+	set appearance.backgroundColour=#ffffff;
+	set appearance.branchColorAttribute="User selection";
+	set appearance.branchColorGradient=false;
+	set appearance.branchLineWidth=1.0;
+	set appearance.branchMinLineWidth=0.0;
+	set appearance.branchWidthAttribute="Fixed";
+	set appearance.foregroundColour=#000000;
+	set appearance.hilightingGradient=false;
+	set appearance.selectionColour=#2d3680;
+	set branchLabels.colorAttribute="User selection";
+	set branchLabels.displayAttribute="Branch times";
+	set branchLabels.fontName="sansserif";
+	set branchLabels.fontSize=8;
+	set branchLabels.fontStyle=0;
+	set branchLabels.isShown=false;
+	set branchLabels.significantDigits=4;
+	set layout.expansion=0;
+	set layout.layoutType="RECTILINEAR";
+	set layout.zoom=0;
+	set legend.attribute="label";
+	set legend.fontSize=10.0;
+	set legend.isShown=false;
+	set legend.significantDigits=4;
+	set nodeBars.barWidth=4.0;
+	set nodeBars.displayAttribute=null;
+	set nodeBars.isShown=false;
+	set nodeLabels.colorAttribute="User selection";
+	set nodeLabels.displayAttribute="Node ages";
+	set nodeLabels.fontName="sansserif";
+	set nodeLabels.fontSize=8;
+	set nodeLabels.fontStyle=0;
+	set nodeLabels.isShown=false;
+	set nodeLabels.significantDigits=4;
+	set nodeShape.colourAttribute="User selection";
+	set nodeShape.isShown=false;
+	set nodeShape.minSize=10.0;
+	set nodeShape.scaleType=Width;
+	set nodeShape.shapeType=Circle;
+	set nodeShape.size=4.0;
+	set nodeShape.sizeAttribute="Fixed";
+	set polarLayout.alignTipLabels=false;
+	set polarLayout.angularRange=0;
+	set polarLayout.rootAngle=0;
+	set polarLayout.rootLength=100;
+	set polarLayout.showRoot=true;
+	set radialLayout.spread=0.0;
+	set rectilinearLayout.alignTipLabels=false;
+	set rectilinearLayout.curvature=0;
+	set rectilinearLayout.rootLength=100;
+	set scale.offsetAge=0.0;
+	set scale.rootAge=1.0;
+	set scale.scaleFactor=1.0;
+	set scale.scaleRoot=false;
+	set scaleAxis.automaticScale=true;
+	set scaleAxis.fontSize=8.0;
+	set scaleAxis.isShown=false;
+	set scaleAxis.lineWidth=1.0;
+	set scaleAxis.majorTicks=1.0;
+	set scaleAxis.origin=0.0;
+	set scaleAxis.reverseAxis=false;
+	set scaleAxis.showGrid=true;
+	set scaleBar.automaticScale=true;
+	set scaleBar.fontSize=10.0;
+	set scaleBar.isShown=true;
+	set scaleBar.lineWidth=1.0;
+	set scaleBar.scaleRange=0.0;
+	set tipLabels.colorAttribute="User selection";
+	set tipLabels.displayAttribute="Names";
+	set tipLabels.fontName="sansserif";
+	set tipLabels.fontSize=8;
+	set tipLabels.fontStyle=0;
+	set tipLabels.isShown=true;
+	set tipLabels.significantDigits=4;
+	set trees.order=true;
+	set trees.orderType="decreasing";
+	set trees.rooting=false;
+	set trees.rootingType="User Selection";
+	set trees.transform=false;
+	set trees.transformType="cladogram";
+end;
+

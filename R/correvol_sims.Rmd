@@ -1,0 +1,563 @@
+---
+title: Correlated Evolution Simultions
+---
+
+```{r setup, echo = FALSE}
+
+library("ape")
+library("geiger")
+library("phytools")
+library("plyr")
+library("dplyr")
+
+here::i_am("R/correvol_sims.Rmd")
+
+file.list <- here::here(paste0("data/Correlated_evolutions_12_trait_combinations/24_runs_Independent_Dependent/", list.files(here::here("data/Correlated_evolutions_12_trait_combinations/24_runs_Independent_Dependent/"), pattern = ".txt")))
+text.list <- lapply(file.list, readLines)
+skip.rows <- sapply(text.list, grep, pattern = "Iteration")[2, ] - 1
+
+logfiles <- lapply(1:length(file.list), function(x){read.table(file.list[[x]], skip = skip.rows[x], sep = "\t", header = TRUE)[, -6]})
+
+indep.list <- grep("_INDEPENDENT", file.list)
+dep.list <- grep("_DEPENDENT", file.list, fixed = TRUE)
+
+post.trees.100 <- read.nexus(here::here("data/Correlated_evolutions_12_trait_combinations/55Nepenthes100trees_nexus.tre"))
+
+post.trees.100 <- lapply(post.trees.100, function(x){x$tip.label <- setNames(sapply(x$tip.label, function(y){paste0(strsplit(y, split = "_")[[1]][1:2], collapse = "_")}), NULL);return(x)})
+
+```
+
+```{r fit-discrete-indep, echo = FALSE}
+
+LA.trait <- read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LA1=0_Wax1=0.txt"), sep = "\t")
+LA.trait[LA.trait[, 1] == "N_dactylifera" ,1] <- "N_fusca"
+LA.fit.indep <- lapply(1:100, function(x){fitDiscrete(post.trees.100[[x]], setNames(LA.trait[, 2] + 1, LA.trait[,1]), model = "ARD")})
+
+WAX.trait <- read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LA1=0_Wax1=0.txt"), sep = "\t")
+WAX.trait[WAX.trait[, 1] == "N_dactylifera" ,1] <- "N_fusca"
+WAX.fit.indep <- lapply(1:100, function(x){fitDiscrete(post.trees.100[[x]], setNames(WAX.trait[, 3] + 1, WAX.trait[,1]))})
+
+LL.trait <- read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LL1=0_LA1=0.txt"), sep = "\t")
+LL.trait[LL.trait[, 1] == "N_dactylifera" ,1] <- "N_fusca"
+LL.fit.indep <- lapply(1:100, function(x){fitDiscrete(post.trees.100[[x]], setNames(LL.trait[, 2] + 1, LL.trait[,1]))})
+
+
+```
+
+
+# Simulations for the independent scenario
+
+```{r independent-sims, echo = FALSE}
+
+## Lid Angle
+
+qq.LA.indep <- lapply(LA.fit.indep, function(x){matrix(c(-x$opt$q12, x$opt$q12, x$opt$q21, -x$opt$q21), byrow = TRUE, ncol = 2, nrow = 2)})
+
+LA.sims.indep <- vector(mode = "list", length = length(post.trees.100))
+root.state.LA.indep <- vector(mode = "list", length = length(post.trees.100))
+
+for(i in 1:length(post.trees.100)){
+    print(paste0("Tree ", i))
+    LA.sims.indep[[i]] <- vector(mode = "list", length = 100)
+    root.state.LA.indep[[i]] <- sample(1:nrow(qq.LA.indep[[i]]), 100, replace = TRUE)
+    for(j in 1:length(LA.sims.indep[[i]])){
+        LA.sims.indep[[i]][[j]] <- sim.char(post.trees.100[[i]], par = qq.LA.indep[[i]], model = "discrete", nsim = 1, root = root.state.LA.indep[[i]][j])
+    }
+}
+
+sims.LA.indep.table <- setNames(as.data.frame(matrix(unlist(LA.sims.indep, recursive = TRUE), ncol = Ntip(post.trees.100[[1]]), byrow = TRUE)), post.trees.100[[1]]$tip.label)
+
+## Lid load
+
+qq.LL.indep <- lapply(LL.fit.indep, function(x){matrix(c(-x$opt$q12, x$opt$q12, x$opt$q21, -x$opt$q21), byrow = TRUE, ncol = 2, nrow = 2)})
+
+LL.sims.indep <- vector(mode = "list", length = length(post.trees.100))
+root.state.LL.indep <- vector(mode = "list", length = length(post.trees.100))
+
+for(i in 1:length(post.trees.100)){
+    print(paste0("Tree ", i))
+    LL.sims.indep[[i]] <- vector(mode = "list", length = 100)
+    root.state.LL.indep[[i]] <- sample(1:nrow(qq.LL.indep[[i]]), 100, replace = TRUE)
+    for(j in 1:length(LL.sims.indep[[i]])){
+        LL.sims.indep[[i]][[j]] <- sim.char(post.trees.100[[i]], par = qq.LL.indep[[i]], model = "discrete", nsim = 1, root = root.state.LL.indep[[i]][j])
+    }
+}
+
+sims.LL.indep.table <- setNames(as.data.frame(matrix(unlist(LL.sims.indep, recursive = TRUE), ncol = Ntip(post.trees.100[[1]]), byrow = TRUE)), post.trees.100[[1]]$tip.label)
+
+## Wax Crystals
+
+qq.WAX.indep <- lapply(WAX.fit.indep, function(x){matrix(c(-x$opt$q12, x$opt$q12, x$opt$q21, -x$opt$q21), byrow = TRUE, ncol = 2, nrow = 2)})
+
+WAX.sims.indep <- vector(mode = "list", length = length(post.trees.100))
+root.state.WAX.indep <- vector(mode = "list", length = length(post.trees.100))
+
+for(i in 1:length(post.trees.100)){
+    print(paste0("Tree ", i))
+    WAX.sims.indep[[i]] <- vector(mode = "list", length = 100)
+    root.state.WAX.indep[[i]] <- sample(1:nrow(qq.WAX.indep[[i]]), 100, replace = TRUE)
+    for(j in 1:length(WAX.sims.indep[[i]])){
+        WAX.sims.indep[[i]][[j]] <- sim.char(post.trees.100[[i]], par = qq.WAX.indep[[i]], model = "discrete", nsim = 1, root = root.state.WAX.indep[[i]][j])
+    }
+}
+
+sims.WAX.indep.table <- setNames(as.data.frame(matrix(unlist(WAX.sims.indep, recursive = TRUE), ncol = Ntip(post.trees.100[[1]]), byrow = TRUE)), post.trees.100[[1]]$tip.label)
+
+```
+
+```{r indep-summary, echo = FALSE}
+
+sim.indep.table <- as.data.frame(matrix(NA, nrow = nrow(sims.LA.indep.table), ncol = ncol(sims.LA.indep.table)))
+
+for(i in 1:nrow(sims.LA.indep.table)){
+    sim <- rbind(sims.LA.indep.table[i,], sims.LL.indep.table[i,], sims.WAX.indep.table[i,])
+    sim.indep.table[i,] <- apply(sim, 2, sum)
+}
+
+hist(apply(sim.indep.table, 1, function(x){sum(x == 3)}));abline(v = 2, lty = 2, col = 2)
+
+```
+
+
+
+
+# Simulations for the dependent scenarios
+
+## Lid Angle + Lid Load
+
+```{r lidangle-lidload-sims, echo = FALSE}
+
+## Lid Angle + Lid Load - logfile 10
+
+## 1: 0,0
+## 2: 0,1
+## 3: 1,0
+## 4: 1,1
+
+qq.LALL.dep <- matrix(c(NA, mean(logfiles[[10]]$q12), mean(logfiles[[10]]$q13), 0,
+                        mean(logfiles[[10]]$q21), NA, 0, mean(logfiles[[10]]$q24),
+                        mean(logfiles[[10]]$q31), 0, NA, mean(logfiles[[10]]$q34),
+                        0, mean(logfiles[[10]]$q42), mean(logfiles[[10]]$q43), NA),
+                      ncol = 4, nrow = 4)
+diag(qq.LALL.dep) <- -apply(qq.LALL.dep, 1, sum, na.rm = TRUE)
+
+LALL.sims.dep <- vector(mode = "list", length = length(post.trees.100))
+root.state.LALL.dep <- vector(mode = "list", length = length(post.trees.100))
+
+for(i in 1:length(post.trees.100)){
+    print(paste0("Tree ", i))
+    LALL.sims.dep[[i]] <- vector(mode = "list", length = 100)
+    root.state.LALL.dep[[i]] <- sample(1:nrow(qq.LALL.dep), 100, replace = TRUE)
+    for(j in 1:length(LALL.sims.dep[[i]])){
+        LALL.sims.dep[[i]][[j]] <- sim.char(post.trees.100[[i]], par = qq.LALL.dep, model = "discrete", nsim = 1, root = root.state.LALL.dep[[i]][j])
+    }
+}
+
+sims.LALL.dep.table <- setNames(as.data.frame(matrix(unlist(LALL.sims.dep, recursive = TRUE), ncol = Ntip(post.trees.100[[1]]), byrow = TRUE)), post.trees.100[[1]]$tip.label)
+
+sims.LA.dep.table <- sims.LALL.dep.table
+sims.LA.dep.table[which(sims.LA.dep.table == 1 | sims.LA.dep.table == 2, arr.ind = TRUE)] <- 1
+sims.LA.dep.table[which(sims.LA.dep.table == 3 | sims.LA.dep.table == 4, arr.ind = TRUE)] <- 2
+
+sims.LL.dep.table <- sims.LALL.dep.table
+sims.LL.dep.table[which(sims.LL.dep.table == 1 | sims.LL.dep.table == 3, arr.ind = TRUE)] <- 1
+sims.LL.dep.table[which(sims.LL.dep.table == 2 | sims.LL.dep.table == 4, arr.ind = TRUE)] <- 2
+
+```
+
+```{r lidangle-lidload-summary, echo = FALSE}
+
+sim.LALL.table <- as.data.frame(matrix(NA, nrow = nrow(sims.LALL.dep.table), ncol = ncol(sims.LALL.dep.table)))
+
+for(i in 1:nrow(sims.LALL.dep.table)){
+    sim <- rbind(sims.LA.dep.table[i,], sims.LL.dep.table[i,], sims.WAX.indep.table[i,])
+    sim.LALL.table[i,] <- apply(sim, 2, sum)
+}
+
+hist(apply(sim.LALL.table, 1, function(x){sum(x == 3, na.rm = TRUE)}));abline(v = 2, lty = 2, col = 2)
+
+```
+
+
+
+## Lid Angle + Wax Crystals
+
+```{r lidangle-wax-sims, echo = FALSE}
+
+## Lid Angle + Wax Crystals - Logfile 1
+
+## 1: 0,0
+## 2: 0,1
+## 3: 1,0
+## 4: 1,1
+
+qq.LAWAX.dep <- matrix(c(NA, mean(logfiles[[1]]$q12), mean(logfiles[[1]]$q13), 0,
+                        mean(logfiles[[1]]$q21), NA, 0, mean(logfiles[[1]]$q24),
+                        mean(logfiles[[1]]$q31), 0, NA, mean(logfiles[[1]]$q34),
+                        0, mean(logfiles[[1]]$q42), mean(logfiles[[1]]$q43), NA),
+                      ncol = 4, nrow = 4)
+diag(qq.LAWAX.dep) <- -apply(qq.LAWAX.dep, 1, sum, na.rm = TRUE)
+
+LAWAX.sims.dep <- vector(mode = "list", length = length(post.trees.100))
+root.state.LAWAX.dep <- vector(mode = "list", length = length(post.trees.100))
+
+for(i in 1:length(post.trees.100)){
+    print(paste0("Tree ", i))
+    LAWAX.sims.dep[[i]] <- vector(mode = "list", length = 100)
+    root.state.LAWAX.dep[[i]] <- sample(1:nrow(qq.LAWAX.dep), 100, replace = TRUE)
+    for(j in 1:length(LAWAX.sims.dep[[i]])){
+        LAWAX.sims.dep[[i]][[j]] <- sim.char(post.trees.100[[i]], par = qq.LAWAX.dep, model = "discrete", nsim = 1, root = root.state.LAWAX.dep[[i]][j])
+    }
+}
+
+sims.LAWAX.dep.table <- setNames(as.data.frame(matrix(unlist(LAWAX.sims.dep, recursive = TRUE), ncol = Ntip(post.trees.100[[1]]), byrow = TRUE)), post.trees.100[[1]]$tip.label)
+
+sims.LA.dep.table <- sims.LAWAX.dep.table
+sims.LA.dep.table[which(sims.LA.dep.table == 1 | sims.LA.dep.table == 2, arr.ind = TRUE)] <- 1
+sims.LA.dep.table[which(sims.LA.dep.table == 3 | sims.LA.dep.table == 4, arr.ind = TRUE)] <- 2
+
+sims.WAX.dep.table <- sims.LAWAX.dep.table
+sims.WAX.dep.table[which(sims.WAX.dep.table == 1 | sims.WAX.dep.table == 3, arr.ind = TRUE)] <- 1
+sims.WAX.dep.table[which(sims.WAX.dep.table == 2 | sims.WAX.dep.table == 4, arr.ind = TRUE)] <- 2
+
+```
+
+```{r lidangle-WAX-summary, echo = FALSE}
+
+sim.LAWAX.table <- as.data.frame(matrix(NA, nrow = nrow(sims.LAWAX.dep.table), ncol = ncol(sims.LAWAX.dep.table)))
+
+for(i in 1:nrow(sims.LAWAX.dep.table)){
+    sim <- rbind(sims.LA.dep.table[i,], sims.WAX.dep.table[i,], sims.WAX.indep.table[i,])
+    sim.LAWAX.table[i,] <- apply(sim, 2, sum)
+}
+
+hist(apply(sim.LAWAX.table, 1, function(x){sum(x == 3)}));abline(v = 2, lty = 2, col = 2)
+
+```
+
+
+## Lid Load + Wax Crystals
+
+```{r lidangle-lidload-sims, echo = FALSE}
+
+## Lid Load + Wax Crystals - Logfile 13
+
+## 1: 0,0
+## 2: 0,1
+## 3: 1,0
+## 4: 1,1
+
+qq.LLWAX.dep <- matrix(c(NA, mean(logfiles[[13]]$q12), mean(logfiles[[13]]$q13), 0,
+                        mean(logfiles[[13]]$q21), NA, 0, mean(logfiles[[13]]$q24),
+                        mean(logfiles[[13]]$q31), 0, NA, mean(logfiles[[13]]$q34),
+                        0, mean(logfiles[[13]]$q42), mean(logfiles[[13]]$q43), NA),
+                      ncol = 4, nrow = 4)
+diag(qq.LLWAX.dep) <- -apply(qq.LLWAX.dep, 1, sum, na.rm = TRUE)
+
+LLWAX.sims.dep <- vector(mode = "list", length = length(post.trees.100))
+root.state.LLWAX.dep <- vector(mode = "list", length = length(post.trees.100))
+
+for(i in 1:length(post.trees.100)){
+    print(paste0("Tree ", i))
+    LLWAX.sims.dep[[i]] <- vector(mode = "list", length = 100)
+    root.state.LLWAX.dep[[i]] <- sample(1:nrow(qq.LLWAX.dep), 100, replace = TRUE)
+    for(j in 1:length(LLWAX.sims.dep[[i]])){
+        LLWAX.sims.dep[[i]][[j]] <- sim.char(post.trees.100[[i]], par = qq.LLWAX.dep, model = "discrete", nsim = 1, root = root.state.LLWAX.dep[[i]][j])
+    }
+}
+
+sims.LLWAX.dep.table <- setNames(as.data.frame(matrix(unlist(LLWAX.sims.dep, recursive = TRUE), ncol = Ntip(post.trees.100[[1]]), byrow = TRUE)), post.trees.100[[1]]$tip.label)
+
+sims.LL.dep.table <- sims.LLWAX.dep.table
+sims.LL.dep.table[which(sims.LL.dep.table == 1 | sims.LL.dep.table == 2, arr.ind = TRUE)] <- 1
+sims.LL.dep.table[which(sims.LL.dep.table == 3 | sims.LL.dep.table == 4, arr.ind = TRUE)] <- 2
+
+sims.WAX.dep.table <- sims.LLWAX.dep.table
+sims.WAX.dep.table[which(sims.WAX.dep.table == 1 | sims.WAX.dep.table == 3, arr.ind = TRUE)] <- 1
+sims.WAX.dep.table[which(sims.WAX.dep.table == 2 | sims.WAX.dep.table == 4, arr.ind = TRUE)] <- 2
+
+```
+
+```{r lidangle-lidload-summary, echo = FALSE}
+
+sim.LLWAX.table <- as.data.frame(matrix(NA, nrow = nrow(sims.LLWAX.dep.table), ncol = ncol(sims.LLWAX.dep.table)))
+
+for(i in 1:nrow(sims.LLWAX.dep.table)){
+    sim <- rbind(sims.LA.dep.table[i,], sims.LL.dep.table[i,], sims.WAX.indep.table[i,])
+    sim.LLWAX.table[i,] <- apply(sim, 2, sum)
+}
+
+hist(apply(sim.LLWAX.table, 1, function(x){sum(x == 3)}));abline(v = 2, lty = 2, col = 2)
+
+```
+
+
+
+
+
+
+
+
+```{r fit-discrete-indep, echo = FALSE}
+
+LA.trait.2 <- read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LA1=2_Wax1=0.txt"), sep = "\t")
+LA.trait.2[LA.trait.2[, 1] == "N_dactylifera" ,1] <- "N_fusca"
+LA.fit.indep.2 <- lapply(1:100, function(x){fitDiscrete(post.trees.100[[x]], setNames(LA.trait.2[, 2] + 1, LA.trait.2[,1]), model = "ARD")})
+
+WAX.trait.2 <- read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LA1=0_Wax1=2.txt"), sep = "\t")
+WAX.trait.2[WAX.trait.2[, 1] == "N_dactylifera" ,1] <- "N_fusca"
+WAX.fit.indep.2 <- lapply(1:100, function(x){fitDiscrete(post.trees.100[[x]], setNames(WAX.trait.2[, 3] + 1, WAX.trait.2[,1]))})
+
+LL.trait.2 <- read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LL1=2_LA1=0.txt"), sep = "\t")
+LL.trait.2[LL.trait.2[, 1] == "N_dactylifera" ,1] <- "N_fusca"
+LL.fit.indep.2 <- lapply(1:100, function(x){fitDiscrete(post.trees.100[[x]], setNames(LL.trait.2[, 2] + 1, LL.trait.2[,1]))})
+
+
+```
+
+
+# Simulations for the independent scenario
+
+```{r independent-sims, echo = FALSE}
+
+## Lid Angle
+
+qq.LA.indep.2 <- lapply(LA.fit.indep.2, function(x){matrix(c(-x$opt$q12, x$opt$q12, x$opt$q21, -x$opt$q21), byrow = TRUE, ncol = 2, nrow = 2)})
+
+LA.sims.indep.2 <- vector(mode = "list", length = length(post.trees.100))
+root.state.LA.indep.2 <- vector(mode = "list", length = length(post.trees.100))
+
+for(i in 1:length(post.trees.100)){
+    print(paste0("Tree ", i))
+    LA.sims.indep.2[[i]] <- vector(mode = "list", length = 100)
+    root.state.LA.indep.2[[i]] <- sample(1:nrow(qq.LA.indep.2[[i]]), 100, replace = TRUE)
+    for(j in 1:length(LA.sims.indep.2[[i]])){
+        LA.sims.indep.2[[i]][[j]] <- sim.char(post.trees.100[[i]], par = qq.LA.indep.2[[i]], model = "discrete", nsim = 1, root = root.state.LA.indep.2[[i]][j])
+    }
+}
+
+sims.LA.indep.2.table <- setNames(as.data.frame(matrix(unlist(LA.sims.indep.2, recursive = TRUE), ncol = Ntip(post.trees.100[[1]]), byrow = TRUE)), post.trees.100[[1]]$tip.label)
+
+## Lid load
+
+qq.LL.indep <- lapply(LL.fit.indep, function(x){matrix(c(-x$opt$q12, x$opt$q12, x$opt$q21, -x$opt$q21), byrow = TRUE, ncol = 2, nrow = 2)})
+
+LL.sims.indep <- vector(mode = "list", length = length(post.trees.100))
+root.state.LL.indep <- vector(mode = "list", length = length(post.trees.100))
+
+for(i in 1:length(post.trees.100)){
+    print(paste0("Tree ", i))
+    LL.sims.indep[[i]] <- vector(mode = "list", length = 100)
+    root.state.LL.indep[[i]] <- sample(1:nrow(qq.LL.indep[[i]]), 100, replace = TRUE)
+    for(j in 1:length(LL.sims.indep[[i]])){
+        LL.sims.indep[[i]][[j]] <- sim.char(post.trees.100[[i]], par = qq.LL.indep[[i]], model = "discrete", nsim = 1, root = root.state.LL.indep[[i]][j])
+    }
+}
+
+sims.LL.indep.table <- setNames(as.data.frame(matrix(unlist(LL.sims.indep, recursive = TRUE), ncol = Ntip(post.trees.100[[1]]), byrow = TRUE)), post.trees.100[[1]]$tip.label)
+
+## Wax Crystals
+
+qq.WAX.indep <- lapply(WAX.fit.indep, function(x){matrix(c(-x$opt$q12, x$opt$q12, x$opt$q21, -x$opt$q21), byrow = TRUE, ncol = 2, nrow = 2)})
+
+WAX.sims.indep <- vector(mode = "list", length = length(post.trees.100))
+root.state.WAX.indep <- vector(mode = "list", length = length(post.trees.100))
+
+for(i in 1:length(post.trees.100)){
+    print(paste0("Tree ", i))
+    WAX.sims.indep[[i]] <- vector(mode = "list", length = 100)
+    root.state.WAX.indep[[i]] <- sample(1:nrow(qq.WAX.indep[[i]]), 100, replace = TRUE)
+    for(j in 1:length(WAX.sims.indep[[i]])){
+        WAX.sims.indep[[i]][[j]] <- sim.char(post.trees.100[[i]], par = qq.WAX.indep[[i]], model = "discrete", nsim = 1, root = root.state.WAX.indep[[i]][j])
+    }
+}
+
+sims.WAX.indep.table <- setNames(as.data.frame(matrix(unlist(WAX.sims.indep, recursive = TRUE), ncol = Ntip(post.trees.100[[1]]), byrow = TRUE)), post.trees.100[[1]]$tip.label)
+
+```
+
+```{r indep-summary, echo = FALSE}
+
+sim.indep.table <- as.data.frame(matrix(NA, nrow = nrow(sims.LA.indep.table), ncol = ncol(sims.LA.indep.table)))
+
+for(i in 1:nrow(sims.LA.indep.table)){
+    sim <- rbind(sims.LA.indep.table[i,], sims.LL.indep.table[i,], sims.WAX.indep.table[i,])
+    sim.indep.table[i,] <- apply(sim, 2, sum)
+}
+
+hist(apply(sim.indep.table, 1, function(x){sum(x == 3)}));abline(v = 2, lty = 2, col = 2)
+
+```
+
+
+
+
+# Simulations for the dependent scenarios
+
+## Lid Angle + Lid Load
+
+```{r lidangle-lidload-sims, echo = FALSE}
+
+## Lid Angle + Lid Load - logfile 10
+
+## 1: 0,0
+## 2: 0,1
+## 3: 1,0
+## 4: 1,1
+
+qq.LALL.dep <- matrix(c(NA, mean(logfiles[[10]]$q12), mean(logfiles[[10]]$q13), 0,
+                        mean(logfiles[[10]]$q21), NA, 0, mean(logfiles[[10]]$q24),
+                        mean(logfiles[[10]]$q31), 0, NA, mean(logfiles[[10]]$q34),
+                        0, mean(logfiles[[10]]$q42), mean(logfiles[[10]]$q43), NA),
+                      ncol = 4, nrow = 4)
+diag(qq.LALL.dep) <- -apply(qq.LALL.dep, 1, sum, na.rm = TRUE)
+
+LALL.sims.dep <- vector(mode = "list", length = length(post.trees.100))
+root.state.LALL.dep <- vector(mode = "list", length = length(post.trees.100))
+
+for(i in 1:length(post.trees.100)){
+    print(paste0("Tree ", i))
+    LALL.sims.dep[[i]] <- vector(mode = "list", length = 100)
+    root.state.LALL.dep[[i]] <- sample(1:nrow(qq.LALL.dep), 100, replace = TRUE)
+    for(j in 1:length(LALL.sims.dep[[i]])){
+        LALL.sims.dep[[i]][[j]] <- sim.char(post.trees.100[[i]], par = qq.LALL.dep, model = "discrete", nsim = 1, root = root.state.LALL.dep[[i]][j])
+    }
+}
+
+sims.LALL.dep.table <- setNames(as.data.frame(matrix(unlist(LALL.sims.dep, recursive = TRUE), ncol = Ntip(post.trees.100[[1]]), byrow = TRUE)), post.trees.100[[1]]$tip.label)
+
+sims.LA.dep.table <- sims.LALL.dep.table
+sims.LA.dep.table[which(sims.LA.dep.table == 1 | sims.LA.dep.table == 2, arr.ind = TRUE)] <- 1
+sims.LA.dep.table[which(sims.LA.dep.table == 3 | sims.LA.dep.table == 4, arr.ind = TRUE)] <- 2
+
+sims.LL.dep.table <- sims.LALL.dep.table
+sims.LL.dep.table[which(sims.LL.dep.table == 1 | sims.LL.dep.table == 3, arr.ind = TRUE)] <- 1
+sims.LL.dep.table[which(sims.LL.dep.table == 2 | sims.LL.dep.table == 4, arr.ind = TRUE)] <- 2
+
+```
+
+```{r lidangle-lidload-summary, echo = FALSE}
+
+sim.LALL.table <- as.data.frame(matrix(NA, nrow = nrow(sims.LALL.dep.table), ncol = ncol(sims.LALL.dep.table)))
+
+for(i in 1:nrow(sims.LALL.dep.table)){
+    sim <- rbind(sims.LA.dep.table[i,], sims.LL.dep.table[i,], sims.WAX.indep.table[i,])
+    sim.LALL.table[i,] <- apply(sim, 2, sum)
+}
+
+hist(apply(sim.LALL.table, 1, function(x){sum(x == 3, na.rm = TRUE)}));abline(v = 2, lty = 2, col = 2)
+
+```
+
+
+
+## Lid Angle + Wax Crystals
+
+```{r lidangle-wax-sims, echo = FALSE}
+
+## Lid Angle + Wax Crystals - Logfile 1
+
+## 1: 0,0
+## 2: 0,1
+## 3: 1,0
+## 4: 1,1
+
+qq.LAWAX.dep <- matrix(c(NA, mean(logfiles[[1]]$q12), mean(logfiles[[1]]$q13), 0,
+                        mean(logfiles[[1]]$q21), NA, 0, mean(logfiles[[1]]$q24),
+                        mean(logfiles[[1]]$q31), 0, NA, mean(logfiles[[1]]$q34),
+                        0, mean(logfiles[[1]]$q42), mean(logfiles[[1]]$q43), NA),
+                      ncol = 4, nrow = 4)
+diag(qq.LAWAX.dep) <- -apply(qq.LAWAX.dep, 1, sum, na.rm = TRUE)
+
+LAWAX.sims.dep <- vector(mode = "list", length = length(post.trees.100))
+root.state.LAWAX.dep <- vector(mode = "list", length = length(post.trees.100))
+
+for(i in 1:length(post.trees.100)){
+    print(paste0("Tree ", i))
+    LAWAX.sims.dep[[i]] <- vector(mode = "list", length = 100)
+    root.state.LAWAX.dep[[i]] <- sample(1:nrow(qq.LAWAX.dep), 100, replace = TRUE)
+    for(j in 1:length(LAWAX.sims.dep[[i]])){
+        LAWAX.sims.dep[[i]][[j]] <- sim.char(post.trees.100[[i]], par = qq.LAWAX.dep, model = "discrete", nsim = 1, root = root.state.LAWAX.dep[[i]][j])
+    }
+}
+
+sims.LAWAX.dep.table <- setNames(as.data.frame(matrix(unlist(LAWAX.sims.dep, recursive = TRUE), ncol = Ntip(post.trees.100[[1]]), byrow = TRUE)), post.trees.100[[1]]$tip.label)
+
+sims.LA.dep.table <- sims.LAWAX.dep.table
+sims.LA.dep.table[which(sims.LA.dep.table == 1 | sims.LA.dep.table == 2, arr.ind = TRUE)] <- 1
+sims.LA.dep.table[which(sims.LA.dep.table == 3 | sims.LA.dep.table == 4, arr.ind = TRUE)] <- 2
+
+sims.WAX.dep.table <- sims.LAWAX.dep.table
+sims.WAX.dep.table[which(sims.WAX.dep.table == 1 | sims.WAX.dep.table == 3, arr.ind = TRUE)] <- 1
+sims.WAX.dep.table[which(sims.WAX.dep.table == 2 | sims.WAX.dep.table == 4, arr.ind = TRUE)] <- 2
+
+```
+
+```{r lidangle-WAX-summary, echo = FALSE}
+
+sim.LAWAX.table <- as.data.frame(matrix(NA, nrow = nrow(sims.LAWAX.dep.table), ncol = ncol(sims.LAWAX.dep.table)))
+
+for(i in 1:nrow(sims.LAWAX.dep.table)){
+    sim <- rbind(sims.LA.dep.table[i,], sims.WAX.dep.table[i,], sims.WAX.indep.table[i,])
+    sim.LAWAX.table[i,] <- apply(sim, 2, sum)
+}
+
+hist(apply(sim.LAWAX.table, 1, function(x){sum(x == 3)}));abline(v = 2, lty = 2, col = 2)
+
+```
+
+
+## Lid Load + Wax Crystals
+
+```{r lidangle-lidload-sims, echo = FALSE}
+
+## Lid Load + Wax Crystals - Logfile 13
+
+## 1: 0,0
+## 2: 0,1
+## 3: 1,0
+## 4: 1,1
+
+qq.LLWAX.dep <- matrix(c(NA, mean(logfiles[[13]]$q12), mean(logfiles[[13]]$q13), 0,
+                        mean(logfiles[[13]]$q21), NA, 0, mean(logfiles[[13]]$q24),
+                        mean(logfiles[[13]]$q31), 0, NA, mean(logfiles[[13]]$q34),
+                        0, mean(logfiles[[13]]$q42), mean(logfiles[[13]]$q43), NA),
+                      ncol = 4, nrow = 4)
+diag(qq.LLWAX.dep) <- -apply(qq.LLWAX.dep, 1, sum, na.rm = TRUE)
+
+LLWAX.sims.dep <- vector(mode = "list", length = length(post.trees.100))
+root.state.LLWAX.dep <- vector(mode = "list", length = length(post.trees.100))
+
+for(i in 1:length(post.trees.100)){
+    print(paste0("Tree ", i))
+    LLWAX.sims.dep[[i]] <- vector(mode = "list", length = 100)
+    root.state.LLWAX.dep[[i]] <- sample(1:nrow(qq.LLWAX.dep), 100, replace = TRUE)
+    for(j in 1:length(LLWAX.sims.dep[[i]])){
+        LLWAX.sims.dep[[i]][[j]] <- sim.char(post.trees.100[[i]], par = qq.LLWAX.dep, model = "discrete", nsim = 1, root = root.state.LLWAX.dep[[i]][j])
+    }
+}
+
+sims.LLWAX.dep.table <- setNames(as.data.frame(matrix(unlist(LLWAX.sims.dep, recursive = TRUE), ncol = Ntip(post.trees.100[[1]]), byrow = TRUE)), post.trees.100[[1]]$tip.label)
+
+sims.LL.dep.table <- sims.LLWAX.dep.table
+sims.LL.dep.table[which(sims.LL.dep.table == 1 | sims.LL.dep.table == 2, arr.ind = TRUE)] <- 1
+sims.LL.dep.table[which(sims.LL.dep.table == 3 | sims.LL.dep.table == 4, arr.ind = TRUE)] <- 2
+
+sims.WAX.dep.table <- sims.LLWAX.dep.table
+sims.WAX.dep.table[which(sims.WAX.dep.table == 1 | sims.WAX.dep.table == 3, arr.ind = TRUE)] <- 1
+sims.WAX.dep.table[which(sims.WAX.dep.table == 2 | sims.WAX.dep.table == 4, arr.ind = TRUE)] <- 2
+
+```
+
+```{r lidangle-lidload-summary, echo = FALSE}
+
+sim.LLWAX.table <- as.data.frame(matrix(NA, nrow = nrow(sims.LLWAX.dep.table), ncol = ncol(sims.LLWAX.dep.table)))
+
+for(i in 1:nrow(sims.LLWAX.dep.table)){
+    sim <- rbind(sims.LA.dep.table[i,], sims.LL.dep.table[i,], sims.WAX.indep.table[i,])
+    sim.LLWAX.table[i,] <- apply(sim, 2, sum)
+}
+
+hist(apply(sim.LLWAX.table, 1, function(x){sum(x == 3)}));abline(v = 2, lty = 2, col = 2)
+
+```

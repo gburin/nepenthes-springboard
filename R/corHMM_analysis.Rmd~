@@ -1,0 +1,1490 @@
+---
+title: Using corHMM to test for correlated evolution between three binary traits
+header-includes:
+  - \usepackage{float}
+---
+
+
+```{r setup, echo = FALSE, message = FALSE, warning = FALSE}
+
+library("ape")
+library("geiger")
+library("phytools")
+library("plyr")
+library("dplyr")
+library("corHMM")
+library("doMC")
+library("foreach")
+library("kableExtra")
+
+here::i_am("R/corHMM_analysis.Rmd")
+
+post.trees.1000 <- read.nexus(here::here("data/Correlated_evolutions_12_trait_combinations/55Nepenthes1000trees_nexus.tre"))
+
+```
+
+
+```{r corHMM-fit-ll0la0wax0, eval = FALSE, echo = FALSE}
+
+traits.ll0la0wax0 <- read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LA1=0_Wax1=0.txt"), sep = "\t")
+traits.ll0la0wax0 <- cbind(traits.ll0la0wax0, read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LL1=0_LA1=0.txt"), sep = "\t")[,2])
+names(traits.ll0la0wax0) <- c("species", "LA", "WAX", "LL")
+
+fit.indep.er <- vector(mode = "list", length = length(post.trees.1000))
+fit.indep.sym <- vector(mode = "list", length = length(post.trees.1000))
+fit.indep.ard <- vector(mode = "list", length = length(post.trees.1000))
+
+fit.corr.llla <- vector(mode = "list", length = length(post.trees.1000))
+fit.corr.lawax <- vector(mode = "list", length = length(post.trees.1000))
+fit.corr.llwax <- vector(mode = "list", length = length(post.trees.1000))
+
+fit.corr.ard <- vector(mode = "list", length = length(post.trees.1000))
+
+
+mat.er <- matrix(c(NA, 1, 1, 1, NA, NA, NA, NA,
+                   1, NA, NA, NA, 1, 1, NA, NA,
+                   1, NA, NA, 1, 1, NA, 1, NA,
+                   1, NA, NA, NA, NA, 1, 1, NA,
+                   NA, 1, 1, NA, NA, NA, NA, 1,
+                   NA, 1, NA, 1, NA, NA, NA, 1,
+                   NA, NA, 1, 1, NA, NA, NA, 1,
+                   NA, NA, NA, NA, 1, 1, 1, NA),
+                 ncol = 8,
+                 nrow = 8,
+                 byrow = TRUE,
+                 dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.sym <- matrix(c(NA, 1, 2, 3, NA, NA, NA, NA,
+                    1, NA, NA, NA, 2, 3, NA, NA,
+                    2, NA, NA, 2, 1, NA, 3, NA,
+                    3, NA, NA, NA, NA, 1, 2, NA,
+                    NA, 2, 1, NA, NA, NA, NA, 3,
+                    NA, 3, NA, 1, NA, NA, NA, 2,
+                    NA, NA, 3, 2, NA, NA, NA, 1,
+                    NA, NA, NA, NA, 3, 2, 1, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.ard <- matrix(c(NA, 2, 4, 6, NA, NA, NA, NA,
+                    1, NA, NA, NA, 4, 6, NA, NA,
+                    3, NA, NA, 4, 2, NA, 6, NA,
+                    5, NA, NA, NA, NA, 2, 4, NA,
+                    NA, 3, 1, NA, NA, NA, NA, 6,
+                    NA, 5, NA, 1, NA, NA, NA, 4,
+                    NA, NA, 5, 3, NA, NA, NA, 2,
+                    NA, NA, NA, NA, 5, 3, 1, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.llla <- matrix(c(NA, 2, 1, 9, NA, 2, 1, NA,
+                     3, NA, NA, 3, 4, 9, NA, 4,
+                     7, NA, NA, 7, 8, NA, 9, 8,
+                     9, 2, 1, NA, NA, 2, 1, NA,
+                     NA, 5, 6, NA, NA, 5, 6, 9,
+                     3, 9, NA, 3, 4, NA, NA, 4,
+                     7, NA, 9, 7, 8, NA, NA, 8,
+                     NA, 5, 6, NA, NA, 5, 6, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.lawax <- matrix(c(NA, 9, 2, 1, 2, 1, NA, NA,
+                      9, NA, 2, 1, 2, 1, NA, NA,
+                      5, 5, NA, NA, 9, NA, 6, 6,
+                      3, 3, NA, NA, NA, 9, 4, 4,
+                      5, 5, 9, NA, NA, NA, 6, 6,
+                      3, 3, NA, 9, NA, NA, 4, 4,
+                      NA, NA, 7, 8, 7, 8, NA, 9,
+                      NA, NA, 7, 8, 7, 8, 9, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+
+mat.llwax <- matrix(c(NA, 2, 9, 1, 2, NA, 1, NA,
+                      3, NA, 3, NA, 9, 4, NA, 4,
+                      9, 2, NA, 1, 2, NA, 1, NA,
+                      5, NA, 5, NA, NA, 6, 9, 6,
+                      3, 9, 3, NA, NA, 4, NA, 4,
+                      NA, 7, NA, 8, 7, NA, 8, 9,
+                      5, NA, 5, 9, NA, 6, NA, 6,
+                      NA, 7, NA, 8, 7, 9, 8, NA),
+                    ncol = 8,
+                    nrow = 8,
+                    byrow = TRUE,
+                    dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+registerDoMC(12)
+
+fit.indep.er <- foreach(i = 1:length(fit.indep.er)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la0wax0, rate.cat = 1, model = "ER", rate.mat = mat.er, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.indep.sym <- foreach(i = 1:length(fit.indep.sym)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la0wax0, rate.cat = 1, model = "SYM", rate.mat = mat.sym, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.indep.ard <- foreach(i = 1:length(fit.indep.ard)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la0wax0, rate.cat = 1, model = "ARD", rate.mat = mat.ard, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.llla <- foreach(i = 1:length(fit.corr.llla)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la0wax0, rate.cat = 1, model = "ARD", rate.mat = mat.llla, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.lawax <- foreach(i = 1:length(fit.corr.lawax)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la0wax0, rate.cat = 1, model = "ARD", rate.mat = mat.lawax, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.llwax <- foreach(i = 1:length(fit.corr.llwax)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la0wax0, rate.cat = 1, model = "ARD", rate.mat = mat.llwax, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.ard <- foreach(i = 1:length(fit.corr.ard)) %dopar% {
+    corDISC(post.trees.1000[[i]], data = traits.ll0la0wax0, ntraits = 3, model = "ARD", node.states = "marginal", root.p = "madfitz")
+}
+
+## beepr::beep(3)
+
+AICc.table <- data.frame(indep.er = sapply(fit.indep.er, "[[", "AICc"),
+                         indep.sym = sapply(fit.indep.sym, "[[", "AICc"),
+                         indep.ard = sapply(fit.indep.ard, "[[", "AICc"),
+                         corr.llla = sapply(fit.corr.llla, "[[", "AICc"),
+                         corr.lawax = sapply(fit.corr.lawax, "[[", "AICc"),
+                         corr.llwax = sapply(fit.corr.llwax, "[[", "AICc"),
+                         corr.ard = sapply(fit.corr.ard, "[[", "AICc")
+                         )
+
+save.image(here::here("output/corHMM_results_ll0la0wax0.RData"))
+saveRDS(AICc.table, here::here("output/ll0la0wax0_aicc_table.RDS"))
+
+rm(list = ls(pattern = "fit."))
+rm(AICc.table)
+
+```
+
+```{r aic-table-ll0la0wax0, eval = FALSE, echo = FALSE}
+
+## load(here::here("corHMM_results.RData"))
+
+## AICc.table <- data.frame(indep.er = sapply(fit.indep.er, "[[", "AICc"),
+##                          indep.sym = sapply(fit.indep.sym, "[[", "AICc"),
+##                          indep.ard = sapply(fit.indep.ard, "[[", "AICc"),
+##                          corr.er = sapply(fit.corr.er, "[[", "AICc"),
+##                          corr.sym = sapply(fit.corr.sym, "[[", "AICc"),
+##                          corr.ard = sapply(fit.corr.ard, "[[", "AICc")
+##                          )
+
+AICc.table.ll0la0wax0 <- readRDS(here::here("output/ll0la0wax0_aicc_table.RDS"))
+
+delta.AICc.table.ll0la0wax0 <- t(apply(AICc.table.ll0la0wax0, 1, function(x){x - min(x)}))
+
+table(apply(delta.AICc.table.ll0la0wax0, 1, function(x){names(x)[which.min(x)]}))
+
+table(apply(delta.AICc.table.ll0la0wax0, 1, function(x){temp <- x[order(x)[2]];ifelse(temp >= 2, "none", names(temp))}))
+
+```
+
+
+
+
+
+
+```{r corHMM-fit-ll0la2wax0, eval = FALSE, echo = FALSE}
+
+traits.ll0la2wax0 <- read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LA1=2_Wax1=0.txt"), sep = "\t")
+traits.ll0la2wax0 <- cbind(traits.ll0la2wax0, read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LL1=0_LA1=2.txt"), sep = "\t")[,2])
+names(traits.ll0la2wax0) <- c("species", "LA", "WAX", "LL")
+
+fit.indep.er <- vector(mode = "list", length = length(post.trees.1000))
+fit.indep.sym <- vector(mode = "list", length = length(post.trees.1000))
+fit.indep.ard <- vector(mode = "list", length = length(post.trees.1000))
+
+fit.corr.llla <- vector(mode = "list", length = length(post.trees.1000))
+fit.corr.lawax <- vector(mode = "list", length = length(post.trees.1000))
+fit.corr.llwax <- vector(mode = "list", length = length(post.trees.1000))
+
+fit.corr.ard <- vector(mode = "list", length = length(post.trees.1000))
+
+
+mat.er <- matrix(c(NA, 1, 1, 1, NA, NA, NA, NA,
+                   1, NA, NA, NA, 1, 1, NA, NA,
+                   1, NA, NA, 1, 1, NA, 1, NA,
+                   1, NA, NA, NA, NA, 1, 1, NA,
+                   NA, 1, 1, NA, NA, NA, NA, 1,
+                   NA, 1, NA, 1, NA, NA, NA, 1,
+                   NA, NA, 1, 1, NA, NA, NA, 1,
+                   NA, NA, NA, NA, 1, 1, 1, NA),
+                 ncol = 8,
+                 nrow = 8,
+                 byrow = TRUE,
+                 dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.sym <- matrix(c(NA, 1, 2, 3, NA, NA, NA, NA,
+                    1, NA, NA, NA, 2, 3, NA, NA,
+                    2, NA, NA, 2, 1, NA, 3, NA,
+                    3, NA, NA, NA, NA, 1, 2, NA,
+                    NA, 2, 1, NA, NA, NA, NA, 3,
+                    NA, 3, NA, 1, NA, NA, NA, 2,
+                    NA, NA, 3, 2, NA, NA, NA, 1,
+                    NA, NA, NA, NA, 3, 2, 1, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.ard <- matrix(c(NA, 2, 4, 6, NA, NA, NA, NA,
+                    1, NA, NA, NA, 4, 6, NA, NA,
+                    3, NA, NA, 4, 2, NA, 6, NA,
+                    5, NA, NA, NA, NA, 2, 4, NA,
+                    NA, 3, 1, NA, NA, NA, NA, 6,
+                    NA, 5, NA, 1, NA, NA, NA, 4,
+                    NA, NA, 5, 3, NA, NA, NA, 2,
+                    NA, NA, NA, NA, 5, 3, 1, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.llla <- matrix(c(NA, 2, 1, 9, NA, 2, 1, NA,
+                     3, NA, NA, 3, 4, 9, NA, 4,
+                     7, NA, NA, 7, 8, NA, 9, 8,
+                     9, 2, 1, NA, NA, 2, 1, NA,
+                     NA, 5, 6, NA, NA, 5, 6, 9,
+                     3, 9, NA, 3, 4, NA, NA, 4,
+                     7, NA, 9, 7, 8, NA, NA, 8,
+                     NA, 5, 6, NA, NA, 5, 6, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.lawax <- matrix(c(NA, 9, 2, 1, 2, 1, NA, NA,
+                      9, NA, 2, 1, 2, 1, NA, NA,
+                      5, 5, NA, NA, 9, NA, 6, 6,
+                      3, 3, NA, NA, NA, 9, 4, 4,
+                      5, 5, 9, NA, NA, NA, 6, 6,
+                      3, 3, NA, 9, NA, NA, 4, 4,
+                      NA, NA, 7, 8, 7, 8, NA, 9,
+                      NA, NA, 7, 8, 7, 8, 9, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+
+mat.llwax <- matrix(c(NA, 2, 9, 1, 2, NA, 1, NA,
+                      3, NA, 3, NA, 9, 4, NA, 4,
+                      9, 2, NA, 1, 2, NA, 1, NA,
+                      5, NA, 5, NA, NA, 6, 9, 6,
+                      3, 9, 3, NA, NA, 4, NA, 4,
+                      NA, 7, NA, 8, 7, NA, 8, 9,
+                      5, NA, 5, 9, NA, 6, NA, 6,
+                      NA, 7, NA, 8, 7, 9, 8, NA),
+                    ncol = 8,
+                    nrow = 8,
+                    byrow = TRUE,
+                    dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+registerDoMC(12)
+
+fit.indep.er <- foreach(i = 1:length(fit.indep.er)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la2wax0, rate.cat = 1, model = "ER", rate.mat = mat.er, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.indep.sym <- foreach(i = 1:length(fit.indep.sym)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la2wax0, rate.cat = 1, model = "SYM", rate.mat = mat.sym, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.indep.ard <- foreach(i = 1:length(fit.indep.ard)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la2wax0, rate.cat = 1, model = "ARD", rate.mat = mat.ard, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.llla <- foreach(i = 1:length(fit.corr.llla)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la2wax0, rate.cat = 1, model = "ARD", rate.mat = mat.llla, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.lawax <- foreach(i = 1:length(fit.corr.lawax)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la2wax0, rate.cat = 1, model = "ARD", rate.mat = mat.lawax, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.llwax <- foreach(i = 1:length(fit.corr.llwax)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la2wax0, rate.cat = 1, model = "ARD", rate.mat = mat.llwax, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.ard <- foreach(i = 1:length(fit.corr.ard)) %dopar% {
+    corDISC(post.trees.1000[[i]], data = traits.ll0la2wax0, ntraits = 3, model = "ARD", node.states = "marginal", root.p = "madfitz")
+}
+
+## beepr::beep(3)
+
+AICc.table <- data.frame(indep.er = sapply(fit.indep.er, "[[", "AICc"),
+                         indep.sym = sapply(fit.indep.sym, "[[", "AICc"),
+                         indep.ard = sapply(fit.indep.ard, "[[", "AICc"),
+                         corr.llla = sapply(fit.corr.llla, "[[", "AICc"),
+                         corr.lawax = sapply(fit.corr.lawax, "[[", "AICc"),
+                         corr.llwax = sapply(fit.corr.llwax, "[[", "AICc"),
+                         corr.ard = sapply(fit.corr.ard, "[[", "AICc")
+                         )
+
+save.image(here::here("output/corHMM_results_ll0la2wax0.RData"))
+saveRDS(AICc.table, here::here("output/ll0la2wax0_aicc_table.RDS"))
+
+rm(list = ls(pattern = "fit."))
+rm(AICc.table)
+
+```
+
+```{r aic-table-ll0la2wax0, eval = FALSE, echo = FALSE}
+
+## load(here::here("corHMM_results.RData"))
+
+## AICc.table <- data.frame(indep.er = sapply(fit.indep.er, "[[", "AICc"),
+##                          indep.sym = sapply(fit.indep.sym, "[[", "AICc"),
+##                          indep.ard = sapply(fit.indep.ard, "[[", "AICc"),
+##                          corr.er = sapply(fit.corr.er, "[[", "AICc"),
+##                          corr.sym = sapply(fit.corr.sym, "[[", "AICc"),
+##                          corr.ard = sapply(fit.corr.ard, "[[", "AICc")
+##                          )
+
+AICc.table.ll0la2wax0 <- readRDS(here::here("output/ll0la2wax0_aicc_table.RDS"))
+
+delta.AICc.table.ll0la2wax0 <- t(apply(AICc.table.ll0la2wax0, 1, function(x){x - min(x)}))
+
+table(apply(delta.AICc.table.ll0la2wax0, 1, function(x){names(x)[which.min(x)]}))
+
+table(apply(delta.AICc.table.ll0la2wax0, 1, function(x){temp <- x[order(x)[2]];ifelse(temp >= 2, "none", names(temp))}))
+
+```
+
+
+```{r corHMM-fit-ll2la0wax0, eval = FALSE, echo = FALSE}
+
+traits.ll2la0wax0 <- read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LA1=0_Wax1=0.txt"), sep = "\t")
+traits.ll2la0wax0 <- cbind(traits.ll2la0wax0, read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LL1=2_LA1=0.txt"), sep = "\t")[,2])
+names(traits.ll2la0wax0) <- c("species", "LA", "WAX", "LL")
+
+fit.indep.er <- vector(mode = "list", length = length(post.trees.1000))
+fit.indep.sym <- vector(mode = "list", length = length(post.trees.1000))
+fit.indep.ard <- vector(mode = "list", length = length(post.trees.1000))
+
+fit.corr.llla <- vector(mode = "list", length = length(post.trees.1000))
+fit.corr.lawax <- vector(mode = "list", length = length(post.trees.1000))
+fit.corr.llwax <- vector(mode = "list", length = length(post.trees.1000))
+
+fit.corr.ard <- vector(mode = "list", length = length(post.trees.1000))
+
+
+mat.er <- matrix(c(NA, 1, 1, 1, NA, NA, NA, NA,
+                   1, NA, NA, NA, 1, 1, NA, NA,
+                   1, NA, NA, 1, 1, NA, 1, NA,
+                   1, NA, NA, NA, NA, 1, 1, NA,
+                   NA, 1, 1, NA, NA, NA, NA, 1,
+                   NA, 1, NA, 1, NA, NA, NA, 1,
+                   NA, NA, 1, 1, NA, NA, NA, 1,
+                   NA, NA, NA, NA, 1, 1, 1, NA),
+                 ncol = 8,
+                 nrow = 8,
+                 byrow = TRUE,
+                 dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.sym <- matrix(c(NA, 1, 2, 3, NA, NA, NA, NA,
+                    1, NA, NA, NA, 2, 3, NA, NA,
+                    2, NA, NA, 2, 1, NA, 3, NA,
+                    3, NA, NA, NA, NA, 1, 2, NA,
+                    NA, 2, 1, NA, NA, NA, NA, 3,
+                    NA, 3, NA, 1, NA, NA, NA, 2,
+                    NA, NA, 3, 2, NA, NA, NA, 1,
+                    NA, NA, NA, NA, 3, 2, 1, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.ard <- matrix(c(NA, 2, 4, 6, NA, NA, NA, NA,
+                    1, NA, NA, NA, 4, 6, NA, NA,
+                    3, NA, NA, 4, 2, NA, 6, NA,
+                    5, NA, NA, NA, NA, 2, 4, NA,
+                    NA, 3, 1, NA, NA, NA, NA, 6,
+                    NA, 5, NA, 1, NA, NA, NA, 4,
+                    NA, NA, 5, 3, NA, NA, NA, 2,
+                    NA, NA, NA, NA, 5, 3, 1, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.llla <- matrix(c(NA, 2, 1, 9, NA, 2, 1, NA,
+                     3, NA, NA, 3, 4, 9, NA, 4,
+                     7, NA, NA, 7, 8, NA, 9, 8,
+                     9, 2, 1, NA, NA, 2, 1, NA,
+                     NA, 5, 6, NA, NA, 5, 6, 9,
+                     3, 9, NA, 3, 4, NA, NA, 4,
+                     7, NA, 9, 7, 8, NA, NA, 8,
+                     NA, 5, 6, NA, NA, 5, 6, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.lawax <- matrix(c(NA, 9, 2, 1, 2, 1, NA, NA,
+                      9, NA, 2, 1, 2, 1, NA, NA,
+                      5, 5, NA, NA, 9, NA, 6, 6,
+                      3, 3, NA, NA, NA, 9, 4, 4,
+                      5, 5, 9, NA, NA, NA, 6, 6,
+                      3, 3, NA, 9, NA, NA, 4, 4,
+                      NA, NA, 7, 8, 7, 8, NA, 9,
+                      NA, NA, 7, 8, 7, 8, 9, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+
+mat.llwax <- matrix(c(NA, 2, 9, 1, 2, NA, 1, NA,
+                      3, NA, 3, NA, 9, 4, NA, 4,
+                      9, 2, NA, 1, 2, NA, 1, NA,
+                      5, NA, 5, NA, NA, 6, 9, 6,
+                      3, 9, 3, NA, NA, 4, NA, 4,
+                      NA, 7, NA, 8, 7, NA, 8, 9,
+                      5, NA, 5, 9, NA, 6, NA, 6,
+                      NA, 7, NA, 8, 7, 9, 8, NA),
+                    ncol = 8,
+                    nrow = 8,
+                    byrow = TRUE,
+                    dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+registerDoMC(12)
+
+fit.indep.er <- foreach(i = 1:length(fit.indep.er)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la0wax0, rate.cat = 1, model = "ER", rate.mat = mat.er, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.indep.sym <- foreach(i = 1:length(fit.indep.sym)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la0wax0, rate.cat = 1, model = "SYM", rate.mat = mat.sym, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.indep.ard <- foreach(i = 1:length(fit.indep.ard)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la0wax0, rate.cat = 1, model = "ARD", rate.mat = mat.ard, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.llla <- foreach(i = 1:length(fit.corr.llla)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la0wax0, rate.cat = 1, model = "ARD", rate.mat = mat.llla, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.lawax <- foreach(i = 1:length(fit.corr.lawax)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la0wax0, rate.cat = 1, model = "ARD", rate.mat = mat.lawax, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.llwax <- foreach(i = 1:length(fit.corr.llwax)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la0wax0, rate.cat = 1, model = "ARD", rate.mat = mat.llwax, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.ard <- foreach(i = 1:length(fit.corr.ard)) %dopar% {
+    corDISC(post.trees.1000[[i]], data = traits.ll2la0wax0, ntraits = 3, model = "ARD", node.states = "marginal", root.p = "madfitz")
+}
+
+## beepr::beep(3)
+
+AICc.table <- data.frame(indep.er = sapply(fit.indep.er, "[[", "AICc"),
+                         indep.sym = sapply(fit.indep.sym, "[[", "AICc"),
+                         indep.ard = sapply(fit.indep.ard, "[[", "AICc"),
+                         corr.llla = sapply(fit.corr.llla, "[[", "AICc"),
+                         corr.lawax = sapply(fit.corr.lawax, "[[", "AICc"),
+                         corr.llwax = sapply(fit.corr.llwax, "[[", "AICc"),
+                         corr.ard = sapply(fit.corr.ard, "[[", "AICc")
+                         )
+
+save.image(here::here("output/corHMM_results_ll2la0wax0.RData"))
+saveRDS(AICc.table, here::here("output/ll2la0wax0_aicc_table.RDS"))
+
+rm(list = ls(pattern = "fit."))
+rm(AICc.table)
+
+```
+
+```{r aic-table-ll2la0wax0, eval = FALSE, echo = FALSE}
+
+## load(here::here("corHMM_results.RData"))
+
+## AICc.table <- data.frame(indep.er = sapply(fit.indep.er, "[[", "AICc"),
+##                          indep.sym = sapply(fit.indep.sym, "[[", "AICc"),
+##                          indep.ard = sapply(fit.indep.ard, "[[", "AICc"),
+##                          corr.er = sapply(fit.corr.er, "[[", "AICc"),
+##                          corr.sym = sapply(fit.corr.sym, "[[", "AICc"),
+##                          corr.ard = sapply(fit.corr.ard, "[[", "AICc")
+##                          )
+
+AICc.table.ll2la0wax0 <- readRDS(here::here("output/ll2la0wax0_aicc_table.RDS"))
+
+delta.AICc.table.ll2la0wax0 <- t(apply(AICc.table.ll2la0wax0, 1, function(x){x - min(x)}))
+
+table(apply(delta.AICc.table.ll2la0wax0, 1, function(x){names(x)[which.min(x)]}))
+
+table(apply(delta.AICc.table.ll2la0wax0, 1, function(x){temp <- x[order(x)[2]];ifelse(temp >= 2, "none", names(temp))}))
+
+```
+
+
+```{r corHMM-fit-ll0la0wax2, eval = FALSE, echo = FALSE}
+
+traits.ll0la0wax2 <- read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LA1=0_Wax1=2.txt"), sep = "\t")
+traits.ll0la0wax2 <- cbind(traits.ll0la0wax2, read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LL1=0_LA1=0.txt"), sep = "\t")[,2])
+names(traits.ll0la0wax2) <- c("species", "LA", "WAX", "LL")
+
+fit.indep.er <- vector(mode = "list", length = length(post.trees.1000))
+fit.indep.sym <- vector(mode = "list", length = length(post.trees.1000))
+fit.indep.ard <- vector(mode = "list", length = length(post.trees.1000))
+
+fit.corr.llla <- vector(mode = "list", length = length(post.trees.1000))
+fit.corr.lawax <- vector(mode = "list", length = length(post.trees.1000))
+fit.corr.llwax <- vector(mode = "list", length = length(post.trees.1000))
+
+fit.corr.ard <- vector(mode = "list", length = length(post.trees.1000))
+
+
+mat.er <- matrix(c(NA, 1, 1, 1, NA, NA, NA, NA,
+                   1, NA, NA, NA, 1, 1, NA, NA,
+                   1, NA, NA, 1, 1, NA, 1, NA,
+                   1, NA, NA, NA, NA, 1, 1, NA,
+                   NA, 1, 1, NA, NA, NA, NA, 1,
+                   NA, 1, NA, 1, NA, NA, NA, 1,
+                   NA, NA, 1, 1, NA, NA, NA, 1,
+                   NA, NA, NA, NA, 1, 1, 1, NA),
+                 ncol = 8,
+                 nrow = 8,
+                 byrow = TRUE,
+                 dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.sym <- matrix(c(NA, 1, 2, 3, NA, NA, NA, NA,
+                    1, NA, NA, NA, 2, 3, NA, NA,
+                    2, NA, NA, 2, 1, NA, 3, NA,
+                    3, NA, NA, NA, NA, 1, 2, NA,
+                    NA, 2, 1, NA, NA, NA, NA, 3,
+                    NA, 3, NA, 1, NA, NA, NA, 2,
+                    NA, NA, 3, 2, NA, NA, NA, 1,
+                    NA, NA, NA, NA, 3, 2, 1, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.ard <- matrix(c(NA, 2, 4, 6, NA, NA, NA, NA,
+                    1, NA, NA, NA, 4, 6, NA, NA,
+                    3, NA, NA, 4, 2, NA, 6, NA,
+                    5, NA, NA, NA, NA, 2, 4, NA,
+                    NA, 3, 1, NA, NA, NA, NA, 6,
+                    NA, 5, NA, 1, NA, NA, NA, 4,
+                    NA, NA, 5, 3, NA, NA, NA, 2,
+                    NA, NA, NA, NA, 5, 3, 1, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.llla <- matrix(c(NA, 2, 1, 9, NA, 2, 1, NA,
+                     3, NA, NA, 3, 4, 9, NA, 4,
+                     7, NA, NA, 7, 8, NA, 9, 8,
+                     9, 2, 1, NA, NA, 2, 1, NA,
+                     NA, 5, 6, NA, NA, 5, 6, 9,
+                     3, 9, NA, 3, 4, NA, NA, 4,
+                     7, NA, 9, 7, 8, NA, NA, 8,
+                     NA, 5, 6, NA, NA, 5, 6, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.lawax <- matrix(c(NA, 9, 2, 1, 2, 1, NA, NA,
+                      9, NA, 2, 1, 2, 1, NA, NA,
+                      5, 5, NA, NA, 9, NA, 6, 6,
+                      3, 3, NA, NA, NA, 9, 4, 4,
+                      5, 5, 9, NA, NA, NA, 6, 6,
+                      3, 3, NA, 9, NA, NA, 4, 4,
+                      NA, NA, 7, 8, 7, 8, NA, 9,
+                      NA, NA, 7, 8, 7, 8, 9, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+
+mat.llwax <- matrix(c(NA, 2, 9, 1, 2, NA, 1, NA,
+                      3, NA, 3, NA, 9, 4, NA, 4,
+                      9, 2, NA, 1, 2, NA, 1, NA,
+                      5, NA, 5, NA, NA, 6, 9, 6,
+                      3, 9, 3, NA, NA, 4, NA, 4,
+                      NA, 7, NA, 8, 7, NA, 8, 9,
+                      5, NA, 5, 9, NA, 6, NA, 6,
+                      NA, 7, NA, 8, 7, 9, 8, NA),
+                    ncol = 8,
+                    nrow = 8,
+                    byrow = TRUE,
+                    dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+registerDoMC(12)
+
+fit.indep.er <- foreach(i = 1:length(fit.indep.er)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la0wax2, rate.cat = 1, model = "ER", rate.mat = mat.er, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.indep.sym <- foreach(i = 1:length(fit.indep.sym)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la0wax2, rate.cat = 1, model = "SYM", rate.mat = mat.sym, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.indep.ard <- foreach(i = 1:length(fit.indep.ard)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la0wax2, rate.cat = 1, model = "ARD", rate.mat = mat.ard, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.llla <- foreach(i = 1:length(fit.corr.llla)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la0wax2, rate.cat = 1, model = "ARD", rate.mat = mat.llla, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.lawax <- foreach(i = 1:length(fit.corr.lawax)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la0wax2, rate.cat = 1, model = "ARD", rate.mat = mat.lawax, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.llwax <- foreach(i = 1:length(fit.corr.llwax)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la0wax2, rate.cat = 1, model = "ARD", rate.mat = mat.llwax, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.ard <- foreach(i = 1:length(fit.corr.ard)) %dopar% {
+    corDISC(post.trees.1000[[i]], data = traits.ll0la0wax2, ntraits = 3, model = "ARD", node.states = "marginal", root.p = "madfitz")
+}
+
+## beepr::beep(3)
+
+AICc.table <- data.frame(indep.er = sapply(fit.indep.er, "[[", "AICc"),
+                         indep.sym = sapply(fit.indep.sym, "[[", "AICc"),
+                         indep.ard = sapply(fit.indep.ard, "[[", "AICc"),
+                         corr.llla = sapply(fit.corr.llla, "[[", "AICc"),
+                         corr.lawax = sapply(fit.corr.lawax, "[[", "AICc"),
+                         corr.llwax = sapply(fit.corr.llwax, "[[", "AICc"),
+                         corr.ard = sapply(fit.corr.ard, "[[", "AICc")
+                         )
+
+save.image(here::here("output/corHMM_results_ll0la0wax2.RData"))
+saveRDS(AICc.table, here::here("output/ll0la0wax2_aicc_table.RDS"))
+
+rm(list = ls(pattern = "fit."))
+rm(AICc.table)
+
+```
+
+```{r aic-table-ll0la0wax2, eval = FALSE, echo = FALSE}
+
+## load(here::here("corHMM_results.RData"))
+
+## AICc.table <- data.frame(indep.er = sapply(fit.indep.er, "[[", "AICc"),
+##                          indep.sym = sapply(fit.indep.sym, "[[", "AICc"),
+##                          indep.ard = sapply(fit.indep.ard, "[[", "AICc"),
+##                          corr.er = sapply(fit.corr.er, "[[", "AICc"),
+##                          corr.sym = sapply(fit.corr.sym, "[[", "AICc"),
+##                          corr.ard = sapply(fit.corr.ard, "[[", "AICc")
+##                          )
+
+AICc.table.ll0la0wax2 <- readRDS(here::here("output/ll0la0wax2_aicc_table.RDS"))
+
+delta.AICc.table.ll0la0wax2 <- t(apply(AICc.table.ll0la0wax2, 1, function(x){x - min(x)}))
+
+table(apply(delta.AICc.table.ll0la0wax2, 1, function(x){names(x)[which.min(x)]}))
+
+table(apply(delta.AICc.table.ll0la0wax2, 1, function(x){temp <- x[order(x)[2]];ifelse(temp >= 2, "none", names(temp))}))
+
+```
+
+
+
+
+```{r corHMM-fit-ll0la2wax2, eval = FALSE, echo = FALSE}
+
+fit.indep.er <- vector(mode = "list", length = length(post.trees.1000))
+fit.indep.sym <- vector(mode = "list", length = length(post.trees.1000))
+fit.indep.ard <- vector(mode = "list", length = length(post.trees.1000))
+
+fit.corr.llla <- vector(mode = "list", length = length(post.trees.1000))
+fit.corr.lawax <- vector(mode = "list", length = length(post.trees.1000))
+fit.corr.llwax <- vector(mode = "list", length = length(post.trees.1000))
+
+fit.corr.ard <- vector(mode = "list", length = length(post.trees.1000))
+
+
+mat.er <- matrix(c(NA, 1, 1, 1, NA, NA, NA, NA,
+                   1, NA, NA, NA, 1, 1, NA, NA,
+                   1, NA, NA, 1, 1, NA, 1, NA,
+                   1, NA, NA, NA, NA, 1, 1, NA,
+                   NA, 1, 1, NA, NA, NA, NA, 1,
+                   NA, 1, NA, 1, NA, NA, NA, 1,
+                   NA, NA, 1, 1, NA, NA, NA, 1,
+                   NA, NA, NA, NA, 1, 1, 1, NA),
+                 ncol = 8,
+                 nrow = 8,
+                 byrow = TRUE,
+                 dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.sym <- matrix(c(NA, 1, 2, 3, NA, NA, NA, NA,
+                    1, NA, NA, NA, 2, 3, NA, NA,
+                    2, NA, NA, 2, 1, NA, 3, NA,
+                    3, NA, NA, NA, NA, 1, 2, NA,
+                    NA, 2, 1, NA, NA, NA, NA, 3,
+                    NA, 3, NA, 1, NA, NA, NA, 2,
+                    NA, NA, 3, 2, NA, NA, NA, 1,
+                    NA, NA, NA, NA, 3, 2, 1, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.ard <- matrix(c(NA, 2, 4, 6, NA, NA, NA, NA,
+                    1, NA, NA, NA, 4, 6, NA, NA,
+                    3, NA, NA, 4, 2, NA, 6, NA,
+                    5, NA, NA, NA, NA, 2, 4, NA,
+                    NA, 3, 1, NA, NA, NA, NA, 6,
+                    NA, 5, NA, 1, NA, NA, NA, 4,
+                    NA, NA, 5, 3, NA, NA, NA, 2,
+                    NA, NA, NA, NA, 5, 3, 1, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.llla <- matrix(c(NA, 2, 1, 9, NA, 2, 1, NA,
+                     3, NA, NA, 3, 4, 9, NA, 4,
+                     7, NA, NA, 7, 8, NA, 9, 8,
+                     9, 2, 1, NA, NA, 2, 1, NA,
+                     NA, 5, 6, NA, NA, 5, 6, 9,
+                     3, 9, NA, 3, 4, NA, NA, 4,
+                     7, NA, 9, 7, 8, NA, NA, 8,
+                     NA, 5, 6, NA, NA, 5, 6, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.lawax <- matrix(c(NA, 9, 2, 1, 2, 1, NA, NA,
+                      9, NA, 2, 1, 2, 1, NA, NA,
+                      5, 5, NA, NA, 9, NA, 6, 6,
+                      3, 3, NA, NA, NA, 9, 4, 4,
+                      5, 5, 9, NA, NA, NA, 6, 6,
+                      3, 3, NA, 9, NA, NA, 4, 4,
+                      NA, NA, 7, 8, 7, 8, NA, 9,
+                      NA, NA, 7, 8, 7, 8, 9, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+
+mat.llwax <- matrix(c(NA, 2, 9, 1, 2, NA, 1, NA,
+                      3, NA, 3, NA, 9, 4, NA, 4,
+                      9, 2, NA, 1, 2, NA, 1, NA,
+                      5, NA, 5, NA, NA, 6, 9, 6,
+                      3, 9, 3, NA, NA, 4, NA, 4,
+                      NA, 7, NA, 8, 7, NA, 8, 9,
+                      5, NA, 5, 9, NA, 6, NA, 6,
+                      NA, 7, NA, 8, 7, 9, 8, NA),
+                    ncol = 8,
+                    nrow = 8,
+                    byrow = TRUE,
+                    dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+registerDoMC(12)
+
+fit.indep.er <- foreach(i = 1:length(fit.indep.er)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la2wax2, rate.cat = 1, model = "ER", rate.mat = mat.er, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.indep.sym <- foreach(i = 1:length(fit.indep.sym)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la2wax2, rate.cat = 1, model = "SYM", rate.mat = mat.sym, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.indep.ard <- foreach(i = 1:length(fit.indep.ard)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la2wax2, rate.cat = 1, model = "ARD", rate.mat = mat.ard, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.llla <- foreach(i = 1:length(fit.corr.llla)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la2wax2, rate.cat = 1, model = "ARD", rate.mat = mat.llla, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.lawax <- foreach(i = 1:length(fit.corr.lawax)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la2wax2, rate.cat = 1, model = "ARD", rate.mat = mat.lawax, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.llwax <- foreach(i = 1:length(fit.corr.llwax)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll0la2wax2, rate.cat = 1, model = "ARD", rate.mat = mat.llwax, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.ard <- foreach(i = 1:length(fit.corr.ard)) %dopar% {
+    corDISC(post.trees.1000[[i]], data = traits.ll0la2wax2, ntraits = 3, model = "ARD", node.states = "marginal", root.p = "madfitz")
+}
+
+## beepr::beep(3)
+
+AICc.table <- data.frame(indep.er = sapply(fit.indep.er, "[[", "AICc"),
+                         indep.sym = sapply(fit.indep.sym, "[[", "AICc"),
+                         indep.ard = sapply(fit.indep.ard, "[[", "AICc"),
+                         corr.llla = sapply(fit.corr.llla, "[[", "AICc"),
+                         corr.lawax = sapply(fit.corr.lawax, "[[", "AICc"),
+                         corr.llwax = sapply(fit.corr.llwax, "[[", "AICc"),
+                         corr.ard = sapply(fit.corr.ard, "[[", "AICc")
+                         )
+
+save.image(here::here("output/corHMM_results_ll0la2wax2.RData"))
+saveRDS(AICc.table, here::here("output/ll0la2wax2_aicc_table.RDS"))
+
+rm(list = ls(pattern = "fit."))
+rm(AICc.table)
+
+```
+
+```{r aic-table-ll0la2wax2, eval = FALSE, echo = FALSE}
+
+## load(here::here("corHMM_results.RData"))
+
+## AICc.table <- data.frame(indep.er = sapply(fit.indep.er, "[[", "AICc"),
+##                          indep.sym = sapply(fit.indep.sym, "[[", "AICc"),
+##                          indep.ard = sapply(fit.indep.ard, "[[", "AICc"),
+##                          corr.er = sapply(fit.corr.er, "[[", "AICc"),
+##                          corr.sym = sapply(fit.corr.sym, "[[", "AICc"),
+##                          corr.ard = sapply(fit.corr.ard, "[[", "AICc")
+##                          )
+
+AICc.table.ll0la2wax2 <- readRDS(here::here("output/ll0la2wax2_aicc_table.RDS"))
+
+delta.AICc.table.ll0la2wax2 <- t(apply(AICc.table.ll0la2wax2, 1, function(x){x - min(x)}))
+
+table(apply(delta.AICc.table.ll0la2wax2, 1, function(x){names(x)[which.min(x)]}))
+
+table(apply(delta.AICc.table.ll0la2wax2, 1, function(x){temp <- x[order(x)[2]];ifelse(temp >= 2, "none", names(temp))}))
+
+```
+
+
+
+```{r corHMM-fit-ll2la0wax2, eval = FALSE, echo = FALSE}
+
+traits.ll2la0wax2 <- read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LA1=0_Wax1=2.txt"), sep = "\t")
+traits.ll2la0wax2 <- cbind(traits.ll2la0wax2, read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LL1=2_LA1=0.txt"), sep = "\t")[,2])
+names(traits.ll2la0wax2) <- c("species", "LA", "WAX", "LL")
+
+fit.indep.er <- vector(mode = "list", length = length(post.trees.1000))
+fit.indep.sym <- vector(mode = "list", length = length(post.trees.1000))
+fit.indep.ard <- vector(mode = "list", length = length(post.trees.1000))
+
+fit.corr.llla <- vector(mode = "list", length = length(post.trees.1000))
+fit.corr.lawax <- vector(mode = "list", length = length(post.trees.1000))
+fit.corr.llwax <- vector(mode = "list", length = length(post.trees.1000))
+
+fit.corr.ard <- vector(mode = "list", length = length(post.trees.1000))
+
+
+mat.er <- matrix(c(NA, 1, 1, 1, NA, NA, NA, NA,
+                   1, NA, NA, NA, 1, 1, NA, NA,
+                   1, NA, NA, 1, 1, NA, 1, NA,
+                   1, NA, NA, NA, NA, 1, 1, NA,
+                   NA, 1, 1, NA, NA, NA, NA, 1,
+                   NA, 1, NA, 1, NA, NA, NA, 1,
+                   NA, NA, 1, 1, NA, NA, NA, 1,
+                   NA, NA, NA, NA, 1, 1, 1, NA),
+                 ncol = 8,
+                 nrow = 8,
+                 byrow = TRUE,
+                 dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.sym <- matrix(c(NA, 1, 2, 3, NA, NA, NA, NA,
+                    1, NA, NA, NA, 2, 3, NA, NA,
+                    2, NA, NA, 2, 1, NA, 3, NA,
+                    3, NA, NA, NA, NA, 1, 2, NA,
+                    NA, 2, 1, NA, NA, NA, NA, 3,
+                    NA, 3, NA, 1, NA, NA, NA, 2,
+                    NA, NA, 3, 2, NA, NA, NA, 1,
+                    NA, NA, NA, NA, 3, 2, 1, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.ard <- matrix(c(NA, 2, 4, 6, NA, NA, NA, NA,
+                    1, NA, NA, NA, 4, 6, NA, NA,
+                    3, NA, NA, 4, 2, NA, 6, NA,
+                    5, NA, NA, NA, NA, 2, 4, NA,
+                    NA, 3, 1, NA, NA, NA, NA, 6,
+                    NA, 5, NA, 1, NA, NA, NA, 4,
+                    NA, NA, 5, 3, NA, NA, NA, 2,
+                    NA, NA, NA, NA, 5, 3, 1, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.llla <- matrix(c(NA, 2, 1, 9, NA, 2, 1, NA,
+                     3, NA, NA, 3, 4, 9, NA, 4,
+                     7, NA, NA, 7, 8, NA, 9, 8,
+                     9, 2, 1, NA, NA, 2, 1, NA,
+                     NA, 5, 6, NA, NA, 5, 6, 9,
+                     3, 9, NA, 3, 4, NA, NA, 4,
+                     7, NA, 9, 7, 8, NA, NA, 8,
+                     NA, 5, 6, NA, NA, 5, 6, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.lawax <- matrix(c(NA, 9, 2, 1, 2, 1, NA, NA,
+                      9, NA, 2, 1, 2, 1, NA, NA,
+                      5, 5, NA, NA, 9, NA, 6, 6,
+                      3, 3, NA, NA, NA, 9, 4, 4,
+                      5, 5, 9, NA, NA, NA, 6, 6,
+                      3, 3, NA, 9, NA, NA, 4, 4,
+                      NA, NA, 7, 8, 7, 8, NA, 9,
+                      NA, NA, 7, 8, 7, 8, 9, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+
+mat.llwax <- matrix(c(NA, 2, 9, 1, 2, NA, 1, NA,
+                      3, NA, 3, NA, 9, 4, NA, 4,
+                      9, 2, NA, 1, 2, NA, 1, NA,
+                      5, NA, 5, NA, NA, 6, 9, 6,
+                      3, 9, 3, NA, NA, 4, NA, 4,
+                      NA, 7, NA, 8, 7, NA, 8, 9,
+                      5, NA, 5, 9, NA, 6, NA, 6,
+                      NA, 7, NA, 8, 7, 9, 8, NA),
+                    ncol = 8,
+                    nrow = 8,
+                    byrow = TRUE,
+                    dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+registerDoMC(12)
+
+fit.indep.er <- foreach(i = 1:length(fit.indep.er)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la0wax2, rate.cat = 1, model = "ER", rate.mat = mat.er, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.indep.sym <- foreach(i = 1:length(fit.indep.sym)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la0wax2, rate.cat = 1, model = "SYM", rate.mat = mat.sym, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.indep.ard <- foreach(i = 1:length(fit.indep.ard)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la0wax2, rate.cat = 1, model = "ARD", rate.mat = mat.ard, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.llla <- foreach(i = 1:length(fit.corr.llla)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la0wax2, rate.cat = 1, model = "ARD", rate.mat = mat.llla, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.lawax <- foreach(i = 1:length(fit.corr.lawax)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la0wax2, rate.cat = 1, model = "ARD", rate.mat = mat.lawax, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.llwax <- foreach(i = 1:length(fit.corr.llwax)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la0wax2, rate.cat = 1, model = "ARD", rate.mat = mat.llwax, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.ard <- foreach(i = 1:length(fit.corr.ard)) %dopar% {
+    corDISC(post.trees.1000[[i]], data = traits.ll2la0wax2, ntraits = 3, model = "ARD", node.states = "marginal", root.p = "madfitz")
+}
+
+## beepr::beep(3)
+
+AICc.table <- data.frame(indep.er = sapply(fit.indep.er, "[[", "AICc"),
+                         indep.sym = sapply(fit.indep.sym, "[[", "AICc"),
+                         indep.ard = sapply(fit.indep.ard, "[[", "AICc"),
+                         corr.llla = sapply(fit.corr.llla, "[[", "AICc"),
+                         corr.lawax = sapply(fit.corr.lawax, "[[", "AICc"),
+                         corr.llwax = sapply(fit.corr.llwax, "[[", "AICc"),
+                         corr.ard = sapply(fit.corr.ard, "[[", "AICc")
+                         )
+
+save.image(here::here("output/corHMM_results_ll2la0wax2.RData"))
+saveRDS(AICc.table, here::here("output/ll2la0wax2_aicc_table.RDS"))
+
+rm(list = ls(pattern = "fit."))
+rm(AICc.table)
+
+```
+
+```{r aic-table-ll2la0wax2, eval = FALSE, echo = FALSE}
+
+## load(here::here("corHMM_results.RData"))
+
+## AICc.table <- data.frame(indep.er = sapply(fit.indep.er, "[[", "AICc"),
+##                          indep.sym = sapply(fit.indep.sym, "[[", "AICc"),
+##                          indep.ard = sapply(fit.indep.ard, "[[", "AICc"),
+##                          corr.er = sapply(fit.corr.er, "[[", "AICc"),
+##                          corr.sym = sapply(fit.corr.sym, "[[", "AICc"),
+##                          corr.ard = sapply(fit.corr.ard, "[[", "AICc")
+##                          )
+
+AICc.table.ll2la0wax2 <- readRDS(here::here("output/ll2la0wax2_aicc_table.RDS"))
+
+delta.AICc.table.ll2la0wax2 <- t(apply(AICc.table.ll2la0wax2, 1, function(x){x - min(x)}))
+
+table(apply(delta.AICc.table.ll2la0wax2, 1, function(x){names(x)[which.min(x)]}))
+
+table(apply(delta.AICc.table.ll2la0wax2, 1, function(x){temp <- x[order(x)[2]];ifelse(temp >= 2, "none", names(temp))}))
+
+```
+
+```{r corHMM-fit-ll2la2wax0, eval = FALSE, echo = FALSE}
+
+traits.ll2la2wax0 <- read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LA1=2_Wax1=0.txt"), sep = "\t")
+traits.ll2la2wax0 <- cbind(traits.ll2la2wax0, read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LL1=2_LA1=2.txt"), sep = "\t")[,2])
+names(traits.ll2la2wax0) <- c("species", "LA", "WAX", "LL")
+
+fit.indep.er <- vector(mode = "list", length = length(post.trees.1000))
+fit.indep.sym <- vector(mode = "list", length = length(post.trees.1000))
+fit.indep.ard <- vector(mode = "list", length = length(post.trees.1000))
+
+fit.corr.llla <- vector(mode = "list", length = length(post.trees.1000))
+fit.corr.lawax <- vector(mode = "list", length = length(post.trees.1000))
+fit.corr.llwax <- vector(mode = "list", length = length(post.trees.1000))
+
+fit.corr.ard <- vector(mode = "list", length = length(post.trees.1000))
+
+
+mat.er <- matrix(c(NA, 1, 1, 1, NA, NA, NA, NA,
+                   1, NA, NA, NA, 1, 1, NA, NA,
+                   1, NA, NA, 1, 1, NA, 1, NA,
+                   1, NA, NA, NA, NA, 1, 1, NA,
+                   NA, 1, 1, NA, NA, NA, NA, 1,
+                   NA, 1, NA, 1, NA, NA, NA, 1,
+                   NA, NA, 1, 1, NA, NA, NA, 1,
+                   NA, NA, NA, NA, 1, 1, 1, NA),
+                 ncol = 8,
+                 nrow = 8,
+                 byrow = TRUE,
+                 dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.sym <- matrix(c(NA, 1, 2, 3, NA, NA, NA, NA,
+                    1, NA, NA, NA, 2, 3, NA, NA,
+                    2, NA, NA, 2, 1, NA, 3, NA,
+                    3, NA, NA, NA, NA, 1, 2, NA,
+                    NA, 2, 1, NA, NA, NA, NA, 3,
+                    NA, 3, NA, 1, NA, NA, NA, 2,
+                    NA, NA, 3, 2, NA, NA, NA, 1,
+                    NA, NA, NA, NA, 3, 2, 1, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.ard <- matrix(c(NA, 2, 4, 6, NA, NA, NA, NA,
+                    1, NA, NA, NA, 4, 6, NA, NA,
+                    3, NA, NA, 4, 2, NA, 6, NA,
+                    5, NA, NA, NA, NA, 2, 4, NA,
+                    NA, 3, 1, NA, NA, NA, NA, 6,
+                    NA, 5, NA, 1, NA, NA, NA, 4,
+                    NA, NA, 5, 3, NA, NA, NA, 2,
+                    NA, NA, NA, NA, 5, 3, 1, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.llla <- matrix(c(NA, 2, 1, 9, NA, 2, 1, NA,
+                     3, NA, NA, 3, 4, 9, NA, 4,
+                     7, NA, NA, 7, 8, NA, 9, 8,
+                     9, 2, 1, NA, NA, 2, 1, NA,
+                     NA, 5, 6, NA, NA, 5, 6, 9,
+                     3, 9, NA, 3, 4, NA, NA, 4,
+                     7, NA, 9, 7, 8, NA, NA, 8,
+                     NA, 5, 6, NA, NA, 5, 6, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.lawax <- matrix(c(NA, 9, 2, 1, 2, 1, NA, NA,
+                      9, NA, 2, 1, 2, 1, NA, NA,
+                      5, 5, NA, NA, 9, NA, 6, 6,
+                      3, 3, NA, NA, NA, 9, 4, 4,
+                      5, 5, 9, NA, NA, NA, 6, 6,
+                      3, 3, NA, 9, NA, NA, 4, 4,
+                      NA, NA, 7, 8, 7, 8, NA, 9,
+                      NA, NA, 7, 8, 7, 8, 9, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+
+mat.llwax <- matrix(c(NA, 2, 9, 1, 2, NA, 1, NA,
+                      3, NA, 3, NA, 9, 4, NA, 4,
+                      9, 2, NA, 1, 2, NA, 1, NA,
+                      5, NA, 5, NA, NA, 6, 9, 6,
+                      3, 9, 3, NA, NA, 4, NA, 4,
+                      NA, 7, NA, 8, 7, NA, 8, 9,
+                      5, NA, 5, 9, NA, 6, NA, 6,
+                      NA, 7, NA, 8, 7, 9, 8, NA),
+                    ncol = 8,
+                    nrow = 8,
+                    byrow = TRUE,
+                    dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+registerDoMC(12)
+
+fit.indep.er <- foreach(i = 1:length(fit.indep.er)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la2wax0, rate.cat = 1, model = "ER", rate.mat = mat.er, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.indep.sym <- foreach(i = 1:length(fit.indep.sym)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la2wax0, rate.cat = 1, model = "SYM", rate.mat = mat.sym, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.indep.ard <- foreach(i = 1:length(fit.indep.ard)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la2wax0, rate.cat = 1, model = "ARD", rate.mat = mat.ard, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.llla <- foreach(i = 1:length(fit.corr.llla)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la2wax0, rate.cat = 1, model = "ARD", rate.mat = mat.llla, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.lawax <- foreach(i = 1:length(fit.corr.lawax)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la2wax0, rate.cat = 1, model = "ARD", rate.mat = mat.lawax, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.llwax <- foreach(i = 1:length(fit.corr.llwax)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la2wax0, rate.cat = 1, model = "ARD", rate.mat = mat.llwax, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.ard <- foreach(i = 1:length(fit.corr.ard)) %dopar% {
+    corDISC(post.trees.1000[[i]], data = traits.ll2la2wax0, ntraits = 3, model = "ARD", node.states = "marginal", root.p = "madfitz")
+}
+
+## beepr::beep(3)
+
+AICc.table <- data.frame(indep.er = sapply(fit.indep.er, "[[", "AICc"),
+                         indep.sym = sapply(fit.indep.sym, "[[", "AICc"),
+                         indep.ard = sapply(fit.indep.ard, "[[", "AICc"),
+                         corr.llla = sapply(fit.corr.llla, "[[", "AICc"),
+                         corr.lawax = sapply(fit.corr.lawax, "[[", "AICc"),
+                         corr.llwax = sapply(fit.corr.llwax, "[[", "AICc"),
+                         corr.ard = sapply(fit.corr.ard, "[[", "AICc")
+                         )
+
+save.image(here::here("output/corHMM_results_ll2la2wax0.RData"))
+saveRDS(AICc.table, here::here("output/ll2la2wax0_aicc_table.RDS"))
+
+rm(list = ls(pattern = "fit."))
+rm(AICc.table)
+
+```
+
+```{r aic-table-ll2la2wax0, eval = FALSE, echo = FALSE}
+
+## load(here::here("corHMM_results.RData"))
+
+## AICc.table <- data.frame(indep.er = sapply(fit.indep.er, "[[", "AICc"),
+##                          indep.sym = sapply(fit.indep.sym, "[[", "AICc"),
+##                          indep.ard = sapply(fit.indep.ard, "[[", "AICc"),
+##                          corr.er = sapply(fit.corr.er, "[[", "AICc"),
+##                          corr.sym = sapply(fit.corr.sym, "[[", "AICc"),
+##                          corr.ard = sapply(fit.corr.ard, "[[", "AICc")
+##                          )
+
+AICc.table.ll2la2wax0 <- readRDS(here::here("output/ll2la2wax0_aicc_table.RDS"))
+
+delta.AICc.table.ll2la2wax0 <- t(apply(AICc.table.ll2la2wax0, 1, function(x){x - min(x)}))
+
+table(apply(delta.AICc.table.ll2la2wax0, 1, function(x){names(x)[which.min(x)]}))
+
+table(apply(delta.AICc.table.ll2la2wax0, 1, function(x){temp <- x[order(x)[2]];ifelse(temp >= 2, "none", names(temp))}))
+
+```
+
+
+
+
+
+```{r corHMM-fit-ll2la2wax2, eval = FALSE, echo = FALSE}
+
+traits.ll2la2wax2 <- read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LA1=2_Wax1=2.txt"), sep = "\t")
+traits.ll2la2wax2 <- cbind(traits.ll2la2wax2, read.table(here::here("data/Correlated_evolutions_12_trait_combinations/LL1=2_LA1=2.txt"), sep = "\t")[,2])
+names(traits.ll2la2wax2) <- c("species", "LA", "WAX", "LL")
+
+fit.indep.er <- vector(mode = "list", length = length(post.trees.1000))
+fit.indep.sym <- vector(mode = "list", length = length(post.trees.1000))
+fit.indep.ard <- vector(mode = "list", length = length(post.trees.1000))
+
+fit.corr.llla <- vector(mode = "list", length = length(post.trees.1000))
+fit.corr.lawax <- vector(mode = "list", length = length(post.trees.1000))
+fit.corr.llwax <- vector(mode = "list", length = length(post.trees.1000))
+
+fit.corr.ard <- vector(mode = "list", length = length(post.trees.1000))
+
+
+mat.er <- matrix(c(NA, 1, 1, 1, NA, NA, NA, NA,
+                   1, NA, NA, NA, 1, 1, NA, NA,
+                   1, NA, NA, 1, 1, NA, 1, NA,
+                   1, NA, NA, NA, NA, 1, 1, NA,
+                   NA, 1, 1, NA, NA, NA, NA, 1,
+                   NA, 1, NA, 1, NA, NA, NA, 1,
+                   NA, NA, 1, 1, NA, NA, NA, 1,
+                   NA, NA, NA, NA, 1, 1, 1, NA),
+                 ncol = 8,
+                 nrow = 8,
+                 byrow = TRUE,
+                 dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.sym <- matrix(c(NA, 1, 2, 3, NA, NA, NA, NA,
+                    1, NA, NA, NA, 2, 3, NA, NA,
+                    2, NA, NA, 2, 1, NA, 3, NA,
+                    3, NA, NA, NA, NA, 1, 2, NA,
+                    NA, 2, 1, NA, NA, NA, NA, 3,
+                    NA, 3, NA, 1, NA, NA, NA, 2,
+                    NA, NA, 3, 2, NA, NA, NA, 1,
+                    NA, NA, NA, NA, 3, 2, 1, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.ard <- matrix(c(NA, 2, 4, 6, NA, NA, NA, NA,
+                    1, NA, NA, NA, 4, 6, NA, NA,
+                    3, NA, NA, 4, 2, NA, 6, NA,
+                    5, NA, NA, NA, NA, 2, 4, NA,
+                    NA, 3, 1, NA, NA, NA, NA, 6,
+                    NA, 5, NA, 1, NA, NA, NA, 4,
+                    NA, NA, 5, 3, NA, NA, NA, 2,
+                    NA, NA, NA, NA, 5, 3, 1, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.llla <- matrix(c(NA, 2, 1, 9, NA, 2, 1, NA,
+                     3, NA, NA, 3, 4, 9, NA, 4,
+                     7, NA, NA, 7, 8, NA, 9, 8,
+                     9, 2, 1, NA, NA, 2, 1, NA,
+                     NA, 5, 6, NA, NA, 5, 6, 9,
+                     3, 9, NA, 3, 4, NA, NA, 4,
+                     7, NA, 9, 7, 8, NA, NA, 8,
+                     NA, 5, 6, NA, NA, 5, 6, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+mat.lawax <- matrix(c(NA, 9, 2, 1, 2, 1, NA, NA,
+                      9, NA, 2, 1, 2, 1, NA, NA,
+                      5, 5, NA, NA, 9, NA, 6, 6,
+                      3, 3, NA, NA, NA, 9, 4, 4,
+                      5, 5, 9, NA, NA, NA, 6, 6,
+                      3, 3, NA, 9, NA, NA, 4, 4,
+                      NA, NA, 7, 8, 7, 8, NA, 9,
+                      NA, NA, 7, 8, 7, 8, 9, NA),
+                  ncol = 8,
+                  nrow = 8,
+                  byrow = TRUE,
+                  dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+
+mat.llwax <- matrix(c(NA, 2, 9, 1, 2, NA, 1, NA,
+                      3, NA, 3, NA, 9, 4, NA, 4,
+                      9, 2, NA, 1, 2, NA, 1, NA,
+                      5, NA, 5, NA, NA, 6, 9, 6,
+                      3, 9, 3, NA, NA, 4, NA, 4,
+                      NA, 7, NA, 8, 7, NA, 8, 9,
+                      5, NA, 5, 9, NA, 6, NA, 6,
+                      NA, 7, NA, 8, 7, 9, 8, NA),
+                    ncol = 8,
+                    nrow = 8,
+                    byrow = TRUE,
+                    dimnames = list(c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1"), c("0_0_0", "1_0_0", "0_1_0", "0_0_1", "1_1_0", "1_0_1", "0_1_1", "1_1_1")))
+
+registerDoMC(12)
+
+fit.indep.er <- foreach(i = 1:length(fit.indep.er)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la2wax2, rate.cat = 1, model = "ER", rate.mat = mat.er, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.indep.sym <- foreach(i = 1:length(fit.indep.sym)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la2wax2, rate.cat = 1, model = "SYM", rate.mat = mat.sym, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.indep.ard <- foreach(i = 1:length(fit.indep.ard)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la2wax2, rate.cat = 1, model = "ARD", rate.mat = mat.ard, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.llla <- foreach(i = 1:length(fit.corr.llla)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la2wax2, rate.cat = 1, model = "ARD", rate.mat = mat.llla, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.lawax <- foreach(i = 1:length(fit.corr.lawax)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la2wax2, rate.cat = 1, model = "ARD", rate.mat = mat.lawax, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.llwax <- foreach(i = 1:length(fit.corr.llwax)) %dopar% {
+    corHMM(post.trees.1000[[i]], data = traits.ll2la2wax2, rate.cat = 1, model = "ARD", rate.mat = mat.llwax, node.states = "marginal", root.p = "madfitz")
+}
+
+fit.corr.ard <- foreach(i = 1:length(fit.corr.ard)) %dopar% {
+    corDISC(post.trees.1000[[i]], data = traits.ll2la2wax2, ntraits = 3, model = "ARD", node.states = "marginal", root.p = "madfitz")
+}
+
+## beepr::beep(3)
+
+AICc.table <- data.frame(indep.er = sapply(fit.indep.er, "[[", "AICc"),
+                         indep.sym = sapply(fit.indep.sym, "[[", "AICc"),
+                         indep.ard = sapply(fit.indep.ard, "[[", "AICc"),
+                         corr.llla = sapply(fit.corr.llla, "[[", "AICc"),
+                         corr.lawax = sapply(fit.corr.lawax, "[[", "AICc"),
+                         corr.llwax = sapply(fit.corr.llwax, "[[", "AICc"),
+                         corr.ard = sapply(fit.corr.ard, "[[", "AICc")
+                         )
+
+save.image(here::here("output/corHMM_results_ll2la2wax2.RData"))
+saveRDS(AICc.table, here::here("output/ll2la2wax2_aicc_table.RDS"))
+
+rm(list = ls(pattern = "fit."))
+rm(AICc.table)
+
+```
+
+```{r aic-table-ll2la2wax2, eval = FALSE, echo = FALSE}
+
+## load(here::here("corHMM_results.RData"))
+
+## AICc.table <- data.frame(indep.er = sapply(fit.indep.er, "[[", "AICc"),
+##                          indep.sym = sapply(fit.indep.sym, "[[", "AICc"),
+##                          indep.ard = sapply(fit.indep.ard, "[[", "AICc"),
+##                          corr.er = sapply(fit.corr.er, "[[", "AICc"),
+##                          corr.sym = sapply(fit.corr.sym, "[[", "AICc"),
+##                          corr.ard = sapply(fit.corr.ard, "[[", "AICc")
+##                          )
+
+AICc.table.ll2la2wax2 <- readRDS(here::here("output/ll2la2wax2_aicc_table.RDS"))
+
+delta.AICc.table.ll2la2wax2 <- t(apply(AICc.table.ll2la2wax2, 1, function(x){x - min(x)}))
+
+table(apply(delta.AICc.table.ll2la2wax2, 1, function(x){names(x)[which.min(x)]}))
+
+table(apply(delta.AICc.table.ll2la2wax2, 1, function(x){temp <- x[order(x)[2]];ifelse(temp >= 2, "none", names(temp))}))
+
+```
+
+```{r summary-results, echo = FALSE}
+
+aicc.table.ll0la0wax0 <- readRDS(here::here("output/ll0la0wax0_aicc_table.RDS"))
+delta.aicc.table.ll0la0wax0 <- t(apply(aicc.table.ll0la0wax0, 1, function(x){x - min(x)}))
+
+aicc.table.ll2la0wax0 <- readRDS(here::here("output/ll2la0wax0_aicc_table.RDS"))
+delta.aicc.table.ll2la0wax0 <- t(apply(aicc.table.ll2la0wax0, 1, function(x){x - min(x)}))
+
+aicc.table.ll0la2wax0 <- readRDS(here::here("output/ll0la2wax0_aicc_table.RDS"))
+delta.aicc.table.ll0la2wax0 <- t(apply(aicc.table.ll0la2wax0, 1, function(x){x - min(x)}))
+
+aicc.table.ll0la0wax2 <- readRDS(here::here("output/ll0la0wax2_aicc_table.RDS"))
+delta.aicc.table.ll0la0wax2 <- t(apply(aicc.table.ll0la0wax2, 1, function(x){x - min(x)}))
+
+aicc.table.ll2la2wax0 <- readRDS(here::here("output/ll2la2wax0_aicc_table.RDS"))
+delta.aicc.table.ll2la2wax0 <- t(apply(aicc.table.ll2la2wax0, 1, function(x){x - min(x)}))
+
+aicc.table.ll2la0wax2 <- readRDS(here::here("output/ll2la0wax2_aicc_table.RDS"))
+delta.aicc.table.ll2la0wax2 <- t(apply(aicc.table.ll2la0wax2, 1, function(x){x - min(x)}))
+
+aicc.table.ll0la2wax2 <- readRDS(here::here("output/ll0la2wax2_aicc_table.RDS"))
+delta.aicc.table.ll0la2wax2 <- t(apply(aicc.table.ll0la2wax2, 1, function(x){x - min(x)}))
+
+aicc.table.ll2la2wax2 <- readRDS(here::here("output/ll2la2wax2_aicc_table.RDS"))
+delta.aicc.table.ll2la2wax2 <- t(apply(aicc.table.ll2la2wax2, 1, function(x){x - min(x)}))
+
+best.model.list <- llply(ls(pattern = "delta.aicc.table."), function(x){table(apply(get(x), 1, function(y){names(y)[which.min(y)]}))})
+names(best.model.list) <- gsub("delta.aicc.table.", "", ls(pattern = "delta.aicc.table."))
+best.model.table <- as.data.frame(bind_rows(best.model.list))
+rownames(best.model.table) <- gsub("delta.aicc.table.", "", ls(pattern = "delta.aicc.table."))
+
+second.best.list <- llply(ls(pattern = "delta.aicc.table."), function(x){table(apply(get(x), 1, function(y){temp <- y[order(y)[2]];ifelse(temp > 2, "none", names(temp))}))})
+names(second.best.list) <- gsub("delta.aicc.table.", "", ls(pattern = "delta.aicc.table."))
+second.best.table <- as.data.frame(bind_rows(second.best.list))
+rownames(second.best.table) <- c("ll0la0wax0", "ll2la0wax0", "ll0la2wax0", "ll0la0wax2", "ll2la2wax0", "ll2la0wax2", "ll0la2wax2", "ll2la2wax2")
+
+```
+
+# Methods
+
+To probe whether the three component traits of the springboard trapping mechanism evolved independently or jointly, we used Pagel's (1994) model of correlated evolution as implemented in the package 'corHMM' (Beaulieu et al. 2022). In summary, this model compares the likelihoods of two models of binary traits; one where the rate of state changes in one trait is independent of that in other traits (independend model), and one in which the rate of change of the focal trait depends on the state of the other traits (dependent model). The implementation in 'corHMM' allows us to test for the correlated evolution of three binary traits at once, which cannot be done with other software. 
+
+We fitted three different independent models, which described different rate scenarios: in the first model (namely Equal Rates - ER), all transitions between different states of the three traits are described by a single parameter, meaning that all transitions would occur at the same rate; in the second model (namely Symmetrical Rates - SYM), the transitions between states within each trait are described by the same parameter, but each trait has its own transition rates; the third and more complex independent model (namely All Rates Different - ARD) is one in which the transitions between the two states of one trait are different in each direction, i.e. the transition from 0 to 1 is described by a different parameter than the transition from 1 to 0.  Lastly, we also fitted the model in which the transition rates between states in each of the traits is conditioned on the states of the other two traits.
+
+We fitted all four models to a sample of 1000 trees from BEAST analysis, thus taking into account phylogenetic uncertainty in the model selection approach. The model requires all characters to be coded as binary discrete traits. To probe how coding the marginal cases (near-horizon orientation, pivot-like behavior, inconsistent wax) affected the inferences, we created an alternative coding for each of the traits: (1) with marginal cases coded as 'present' for both traits, (2) with marginal cases coded as 'absent' for both traits, (3) with the marginal case coded as 'present' for the first trait and 'absent' for the second, and (4) with the marginal case coded as 'absent' for the first trait and 'present' for the second. We thus combined these alternative codings for each trait into 8 sets of analyses that used all parwise combinations between original and alternative codings.
+
+We selected the best model by using the Akaike Information Criterion corrected for small sample sizes (AICc), and also interpreted the second best model when the differente in AICc to the best model was lower than 2 (Burnham \& Anderson, 2002)
+
+# Summary results
+
+After fitting the four models (namely "Independent ER", "Independent SYM", "Independent ARD", "Correlated ARD") to all 1000 trees from the posterior distribution, we found that, apart from marginal cases, in most of the pairwise combinations between different codings for the three traits the correlated model was selected as the best or second best model. Even though an independent model was always selected as the best in all trees, the best rate scenario (between equal rates, symmetrical or all rates different) varied greatly depending on the used coding (table 1).
+
+```{r table-best, echo = FALSE}
+
+kable(x = best.model.table, format = "latex", caption = "Number of trees from the posterior distribution for which each of the models was selected as the best model.", col.names = c("Indep ARD", "Indep ER", "Indep SYM", "Corr LAWAX Indep LL"), label = "table:table-best", align = "c") %>%
+    kable_styling(full_width = FALSE,
+                  latex_options = "HOLD_position")
+
+```
+
+In addition, when the difference in AICc between the best and second best model was equal to or lower than 2 (Burnham \& Andersen, 2002), the second best model was also always an independent model, which too varied in terms of the rate scenario (table 2). For a few trees in the posterior distribution, the model that describes a correlated evolution between Lid Angle (LA) and Wax Structure (WAX) with Lid Load (LL) evolving independently was selected as the best model for only three of the coding pairings (table 1). Nevertheless, in all those marginal cases the second best model with equivalent support was always one of the independent models (table 2).
+
+```{r table-second, echo = FALSE}
+
+kable(x = second.best.table, format = "latex", caption = "Number of trees from the posterior distribution for which each of the models was selected as the second best model. The column \"None\" refers to the number of trees for which the best model had a deltaAICc value that was higher than 2.", col.names = c("Indep ARD", "Indep ER", "Indep SYM", "None", "Corr LLLA Indep WAX", "Corr LAWAX Indep LL"), label = "table:table-second", align = "c") %>%
+    kable_styling(full_width = FALSE,
+                  latex_options = "HOLD_position")
+
+```
+
+
+# Posterior Predictive Simulations
+
+```{r}
+
+## LL0LA0WAX0
+
+load(here::here("output/corHMM_results_ll0la0wax0.RData"))
+registerDoMC(2)
+
+sims.best <- vector(mode = "list", length = length(post.trees.1000))
+for(i in 1:length(post.trees.1000)){
+    print(i)
+    model <- names(AICc.table.ll0la0wax0)[which.min(AICc.table.ll0la0wax0[i, ])]
+    sim.mat <- get(paste0("fit.", model))[[i]]$solution
+    diag(sim.mat) <- -apply(sim.mat, 1, sum, na.rm = TRUE)
+    sim.mat[is.na(sim.mat)] <- 0
+    sims.best[[i]] <- foreach(j = 1:20) %dopar% {
+        sim.char(post.trees.1000[[i]], par = sim.mat, model = "discrete", root = sample(1:8, 1, prob = get(paste0("fit.", model))[[i]]$states[1,]))
+    }
+}
+
+sims.best.table <- setNames(as.data.frame(matrix(unlist(sims.best, recursive = TRUE), ncol = Ntip(post.trees.1000[[1]]), byrow = TRUE)), post.trees.1000[[1]]$tip.label)
+sims.best.states <- apply(sims.best.table, 1, function(x){sum(x == 8)})
+sims.best.states <- bind_rows(sims.best.states)
+
+
+sims.corr <- vector(mode = "list", length = length(post.trees.1000))
+for(i in 1:length(post.trees.1000)){
+    print(i)
+    #model <- names(AICc.table.ll0la0wax0)[which.min(AICc.table.ll0la0wax0[i, ])]
+    sim.mat <- fit.corr.ard[[i]]$solution
+    diag(sim.mat) <- -apply(sim.mat, 1, sum, na.rm = TRUE)
+    sim.mat[is.na(sim.mat)] <- 0
+    sims.corr[[i]] <- foreach(j = 1:20) %dopar% {
+        sim.char(post.trees.1000[[i]], par = sim.mat, model = "discrete", root = sample(1:8, 1, prob = get(paste0("fit.", model))[[i]]$states[1,]))
+    }
+}
+
+sims.corr.table <- setNames(as.data.frame(matrix(unlist(sims.corr, recursive = TRUE), ncol = Ntip(post.trees.1000[[1]]), byrow = TRUE)), post.trees.1000[[1]]$tip.label)
+sims.corr.states <- apply(sims.corr.table, 1, function(x){sum(x == 8)})
+sims.corr.states <- bind_rows(sims.corr.states)
+
+
+
+```
